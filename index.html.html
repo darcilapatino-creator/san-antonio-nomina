@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nómina — San Antonio · CONSTRUCTHOR</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --dark:#1F2D3D;--blue:#185FA5;--lblue:#D6E8F7;--white:#fff;
+  --gold:#FFCC00;--green:#3B6D11;--lgreen:#EAF3DE;
+  --orange:#BA7517;--red:#A32D2D;--lred:#FCEBEB;
+  --yellow:#FFF8E1;--amber:#F0B429;
+  --gray1:#F7F7F5;--gray2:#EFEFED;--gray3:#D8D8D5;
+  --text1:#1A1A18;--text2:#5F5E5A;--text3:#9B9A96;
+  --radius:10px;--radius-sm:6px;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--gray1);color:var(--text1);min-height:100vh;font-size:14px}
+.screen{display:none}.screen.active{display:block}
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem 1rem}
+
+/* TOP BAR */
+.top-bar{background:var(--dark);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.top-brand-name{font-size:13px;font-weight:600;color:var(--white)}
+.top-brand-sub{font-size:10px;color:var(--gold);margin-top:1px}
+.role-pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--white);display:flex;align-items:center;gap:6px}
+.btn-logout{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);border-radius:var(--radius-sm);padding:5px 10px;font-size:11px;cursor:pointer;font-family:var(--font)}
+.btn-logout:hover{background:rgba(255,255,255,.08)}
+
+/* LOGIN */
+.login-outer{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#0D1B2A 0%,#1F2D3D 50%,#0D1B2A 100%);padding:2rem;position:relative;overflow:hidden}
+.login-logo-name{font-size:26px;font-weight:700;color:#fff;letter-spacing:1px;text-align:center}
+.login-logo-sub{font-size:12px;color:var(--gold);margin-top:4px;text-align:center;margin-bottom:2rem;letter-spacing:.5px}
+.login-card{background:#fff;border-radius:14px;padding:1.75rem;width:100%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,.4);position:relative;z-index:1}
+.login-title{font-size:15px;font-weight:600;color:var(--text1);margin-bottom:4px;text-align:center}
+.login-sub{font-size:12px;color:var(--text3);text-align:center;margin-bottom:1.25rem}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin:1rem 0}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:var(--gray3);transition:background .15s}
+.pin-dot.filled{background:var(--blue)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:210px;margin:0 auto}
+.pin-key{padding:15px;text-align:center;font-size:18px;font-weight:500;border-radius:var(--radius-sm);border:1px solid var(--gray3);cursor:pointer;background:#fff;color:var(--text1);font-family:var(--font);transition:all .1s}
+.pin-key:hover{background:var(--gray1)}.pin-key:active{transform:scale(.95)}
+.pin-error{color:var(--red);font-size:12px;text-align:center;margin-top:8px;min-height:18px}
+
+/* CARDS */
+.card{background:var(--white);border:1px solid var(--gray3);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+.card-title{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;display:flex;align-items:center;gap:6px}
+
+/* TABS */
+.tabs{display:flex;border-bottom:2px solid var(--gray3);margin-bottom:1.5rem;gap:4px}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.tab:hover{color:var(--text1);background:var(--gray2)}
+.tab.activo{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1.5rem}
+.stat-box{background:#fff;border:1px solid var(--gray3);border-radius:var(--radius);padding:1rem;box-shadow:var(--shadow)}
+.stat-label{font-size:11px;color:var(--text3);margin-bottom:4px}
+.stat-val{font-size:22px;font-weight:600;color:var(--text1)}
+.stat-val.verde{color:var(--green)}.stat-val.rojo{color:var(--red)}.stat-val.azul{color:var(--blue)}
+
+/* TABLE */
+.table-wrap{overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--gray3)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--dark);color:#fff;padding:9px 12px;text-align:left;font-weight:500;white-space:nowrap;font-size:11px}
+td{padding:8px 12px;border-bottom:1px solid var(--gray2);color:var(--text1);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray1)}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500}
+.b-ok{background:var(--lgreen);color:var(--green)}
+.b-pend{background:#FAEEDA;color:#854F0B}
+.b-aus{background:var(--lred);color:var(--red)}
+.b-warn{background:var(--yellow);color:#856404}
+
+/* FORMS */
+.field-group{margin-bottom:12px}
+.field-label{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px;display:block;text-transform:uppercase;letter-spacing:.04em}
+.field-input{width:100%;padding:8px 10px;border:1px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;background:var(--white);color:var(--text1);font-family:var(--font);transition:border .15s;outline:none}
+.field-input:focus{border-color:var(--blue)}
+select.field-input{cursor:pointer}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* BTNS */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--gray3);background:var(--white);color:var(--text1);font-family:var(--font);transition:all .15s}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--blue);color:#fff;border-color:var(--blue)}.btn-primary:hover{background:#0C447C}
+.btn-success{background:var(--green);color:#fff;border-color:var(--green)}.btn-success:hover{background:#1E4A08}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-block{width:100%;justify-content:center;padding:11px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem}
+
+/* ALERT */
+.alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.alert-warn{background:var(--yellow);color:#856404;border:1px solid var(--amber)}
+.alert-info{background:var(--lblue);color:var(--blue)}
+
+/* PEND CARD */
+.pend-card{background:var(--white);border:1.5px solid var(--amber);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;box-shadow:var(--shadow)}
+.pend-header{background:var(--yellow);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.pend-nombre{font-size:14px;font-weight:700;flex:1}
+.pend-body{padding:14px}
+.pend-datos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.pend-dato{font-size:11px;color:var(--text3)}
+.pend-dato strong{display:block;font-size:13px;color:var(--text1);font-weight:600}
+.estado-chips{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.chip{flex:1;min-width:140px;padding:8px;border-radius:var(--radius-sm);text-align:center;font-size:11px;font-weight:600}
+.chip-pend{background:var(--yellow);color:#856404}
+.chip-ok{background:var(--lgreen);color:var(--green)}
+.aprov-btns{display:flex;flex-direction:column;gap:6px}
+.btn-aprov{width:100%;padding:10px;border-radius:var(--radius-sm);border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-aprov-obra{background:var(--lgreen);color:var(--green);border:1.5px solid #a7d99a}
+.btn-aprov-obra.aprobado{background:var(--green);color:#fff}
+.btn-aprov-proy{background:var(--lblue);color:var(--blue);border:1.5px solid #a3c8ef}
+.btn-aprov-proy.aprobado{background:var(--blue);color:#fff}
+.btn-rechazar{background:var(--lred);color:var(--red);border:1.5px solid #f5b8b8;margin-top:4px}
+
+/* ASISTENCIA */
+.trabajador-row{background:var(--white);border:1px solid var(--gray3);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;box-shadow:var(--shadow);transition:border-color .15s}
+.trabajador-row.presente{border-color:#86efac}
+.trabajador-row.ausente{border-color:#fca5a5}
+.trab-top{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--gray2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text3);flex-shrink:0}
+.avatar.p{background:var(--lgreen);color:var(--green)}
+.avatar.a{background:var(--lred);color:var(--red)}
+.trab-info{flex:1;min-width:0}
+.trab-nombre{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trab-cargo{font-size:11px;color:var(--text3)}
+.toggle{width:50px;height:26px;border-radius:13px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle.on{background:var(--green)}.toggle.on::after{transform:translateX(24px)}
+.toggle.off{background:var(--gray3)}
+.nov-panel{display:none;background:#fef2f2;border-top:1px solid #fecaca;padding:12px 14px}
+.nov-panel.vis{display:block}
+.nov-label{font-size:11px;font-weight:600;color:var(--red);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+.nov-opts{display:flex;flex-direction:column;gap:6px}
+.nov-opt{padding:9px 12px;border-radius:var(--radius-sm);border:1.5px solid #fecaca;background:#fff;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;font-family:var(--font)}
+.nov-opt.sel{border-color:var(--red);background:#fef2f2;color:var(--red);font-weight:600}
+.nov-obs{width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid #fecaca;border-radius:var(--radius-sm);font-size:12px;font-family:var(--font);resize:none;outline:none;background:#fff}
+.contadores{display:flex;gap:8px;margin-bottom:14px}
+.cnt{flex:1;background:var(--white);border:1px solid var(--gray3);border-radius:var(--radius);padding:10px;text-align:center;box-shadow:var(--shadow)}
+.cnt-num{font-size:20px;font-weight:700}
+.cnt-lab{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* ÉXITO */
+.overlay-ok{display:none;position:fixed;inset:0;background:linear-gradient(135deg,#064e3b,#065f46);z-index:200;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:2rem}
+.overlay-ok.vis{display:flex}
+.ok-icon{font-size:64px;margin-bottom:16px}
+.ok-title{font-size:24px;font-weight:700;margin-bottom:8px}
+.ok-sub{font-size:13px;opacity:.8;line-height:1.5}
+.ok-detail{margin-top:20px;background:rgba(255,255,255,.1);border-radius:10px;padding:14px 20px;width:100%;max-width:300px}
+.ok-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
+.ok-row .l{opacity:.7}
+.btn-nueva{margin-top:24px;padding:12px 28px;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.4);border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font)}
+
+/* CARGANDO */
+.overlay-load{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center}
+.overlay-load.vis{display:flex}
+.spin-card{background:#fff;border-radius:14px;padding:24px 32px;text-align:center}
+.spinner{width:32px;height:32px;border:3px solid var(--gray3);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* SEGURIDAD SOCIAL */
+.ss-tabla td{font-size:12px}
+.pend-tag{color:var(--red);font-weight:600;font-size:11px}
+.ok-tag{color:var(--green);font-weight:500;font-size:11px}
+
+.sep{height:1px;background:var(--gray2);margin:1rem 0}
+.muted{font-size:12px;color:var(--text3)}
+.mt8{margin-top:8px}
+.empty{text-align:center;padding:2rem;color:var(--text3);font-size:13px}
+
+@media(max-width:600px){
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .pend-datos{grid-template-columns:1fr}
+  .top-bar{flex-wrap:wrap;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div id="sc-login" class="screen active">
+<div class="login-outer">
+  <div class="login-logo-name">HABI+TAD</div>
+  <div class="login-logo-sub">PROYECTO VIP SAN ANTONIO · MÓDULO NÓMINA</div>
+  <div class="login-card">
+    <div class="login-title">Ingrese su PIN</div>
+    <div class="login-sub">Acceso restringido al personal autorizado</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key" onclick="pinKey('C')" style="font-size:13px;color:var(--red)">⌫</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key" style="opacity:.3" disabled></button>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════ DASHBOARD PRINCIPAL ═══════════ -->
+<div id="sc-main" class="screen">
+  <div class="top-bar">
+    <div>
+      <div class="top-brand-name">HABI+TAD · Módulo Nómina</div>
+      <div class="top-brand-sub">Proyecto VIP San Antonio · CONSTRUCTHOR S.A.S.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="role-pill" id="rolPill">— Rol —</div>
+      <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- TABS según rol -->
+    <div class="tabs" id="tabsBar"></div>
+    <!-- Contenido dinámico -->
+    <div id="mainContent"></div>
+  </div>
+</div>
+
+<!-- OVERLAY ÉXITO -->
+<div class="overlay-ok" id="overlayOk">
+  <div class="ok-icon">✅</div>
+  <div class="ok-title" id="okTitle">¡Registrado!</div>
+  <div class="ok-sub" id="okSub"></div>
+  <div class="ok-detail" id="okDetail"></div>
+  <button class="btn-nueva" onclick="cerrarOverlayOk()">Continuar</button>
+</div>
+
+<!-- OVERLAY CARGANDO -->
+<div class="overlay-load" id="overlayLoad">
+  <div class="spin-card">
+    <div class="spinner"></div>
+    <div style="font-size:13px;font-weight:600;color:var(--text2)">Enviando datos...</div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ══════════════════════════════════════════════════
+const ROLES = {
+  "5647": { nombre:"Yenny P. Vargas", rol:"SST",               tabs:["asistencia","vinculacion"] },
+  "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",  tabs:["vinculacion","asistencia_ro"] },
+  "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["vinculacion","asistencia_ro","resumen"] },
+  "4829": { nombre:"Finanzas",        rol:"Finanzas",           tabs:["resumen","seguridad"] },
+  "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",       tabs:["resumen","seguridad"] },
+  "7284": { nombre:"Residente",       rol:"Residente de Obra",  tabs:["asistencia_ro"] },
+};
+
+const TAB_LABELS = {
+  asistencia:    { icon:"✅", label:"Asistencia" },
+  asistencia_ro: { icon:"📋", label:"Asistencia" },
+  vinculacion:   { icon:"👤", label:"Vinculación" },
+  resumen:       { icon:"📊", label:"Resumen Nómina" },
+  seguridad:     { icon:"🏥", label:"Seguridad Social" },
+};
+
+const PERSONAL = [
+  {id:1, nombre:"Jeisson Andres Celis Rojas",      cargo:"Topógrafo",              salario:2400000, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:2, nombre:"Miguel Angel Pedraza Ponguta",    cargo:"Aux. Topográfico",       salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones", arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:3, nombre:"Yenny Paola Vargas Sierra",       cargo:"Residente SISO",         salario:2500000, eps:"Sanitas",    pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:4, nombre:"Jhon Jairo González González",    cargo:"Residente de Obra",      salario:4000000, eps:"Sanitas",    pension:"Colpensiones", arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:5, nombre:"Jesús David Rodríguez Vargas",    cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:6, nombre:"Fredy Alfonso Naranjo Corredor",  cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:7, nombre:"Jhon Alexander Gonzalez Rincon",  cargo:"Aux. Administrativo",    salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:8, nombre:"Jose Luis Gaitan",                cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:9, nombre:"Braulio Antonio Cujaban Hurtado", cargo:"Operador",               salario:1750905, eps:"⚠️ Pendiente", pension:"⚠️ Pendiente", arl:"Positiva", ccf:"Comfaboy", activo:true},
+];
+
+const NOVEDADES_TIPOS = [
+  {id:"incapacidad",   icon:"🏥", label:"Incapacidad médica"},
+  {id:"permiso",       icon:"✍️",  label:"Permiso aprobado"},
+  {id:"injustificada", icon:"❌",  label:"Ausencia sin justificación"},
+  {id:"tarde",         icon:"⏰", label:"Llegada tarde"},
+  {id:"accidente",     icon:"🚨", label:"Accidente de trabajo"},
+];
+
+const LS_PERSONAL   = "nom_personal";
+const LS_PENDIENTES = "nom_pendientes";
+const LS_URL        = "nom_script_url";
+
+let rolActual  = null;
+let tabActual  = null;
+let pinBuffer  = "";
+let estadoAsis = {};
+
+// ══════════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════════
+function getPersonal(){
+  const s = localStorage.getItem(LS_PERSONAL);
+  return s ? JSON.parse(s) : JSON.parse(JSON.stringify(PERSONAL));
+}
+function setPersonal(p){ localStorage.setItem(LS_PERSONAL, JSON.stringify(p)); }
+function getPendientes(){
+  const s = localStorage.getItem(LS_PENDIENTES);
+  return s ? JSON.parse(s) : [];
+}
+function setPendientes(p){ localStorage.setItem(LS_PENDIENTES, JSON.stringify(p)); }
+function getURL(){ return localStorage.getItem(LS_URL)||""; }
+
+// ══════════════════════════════════════════════════
+// PIN
+// ══════════════════════════════════════════════════
+function pinKey(k){
+  const err = document.getElementById("pinError");
+  if(k==="C"){ pinBuffer=pinBuffer.slice(0,-1); }
+  else if(pinBuffer.length<4){ pinBuffer+=k; }
+  // dots
+  for(let i=0;i<4;i++) document.getElementById("d"+i).classList.toggle("filled", i<pinBuffer.length);
+  err.textContent="";
+  if(pinBuffer.length===4){
+    if(ROLES[pinBuffer]){
+      rolActual = ROLES[pinBuffer];
+      iniciarSesion();
+    } else {
+      err.textContent="PIN incorrecto. Intente de nuevo.";
+      setTimeout(()=>{ pinBuffer=""; for(let i=0;i<4;i++) document.getElementById("d"+i).classList.remove("filled"); },800);
+    }
+  }
+}
+
+function iniciarSesion(){
+  document.getElementById("sc-login").classList.remove("active");
+  document.getElementById("sc-main").classList.add("active");
+  document.getElementById("rolPill").textContent = `${rolActual.icon||"👤"} ${rolActual.nombre} · ${rolActual.rol}`;
+  document.getElementById("rolPill").textContent = rolActual.nombre + " · " + rolActual.rol;
+  renderTabs();
+  irTab(rolActual.tabs[0]);
+  initEstadoAsis();
+}
+
+function cerrarSesion(){
+  rolActual=null; pinBuffer="";
+  for(let i=0;i<4;i++) document.getElementById("d"+i).classList.remove("filled");
+  document.getElementById("pinError").textContent="";
+  document.getElementById("sc-main").classList.remove("active");
+  document.getElementById("sc-login").classList.add("active");
+}
+
+// ══════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════
+function renderTabs(){
+  const bar = document.getElementById("tabsBar");
+  bar.innerHTML = rolActual.tabs.map(t=>`
+    <div class="tab" id="tab-btn-${t}" onclick="irTab('${t}')">${TAB_LABELS[t].icon} ${TAB_LABELS[t].label}</div>
+  `).join("");
+}
+
+function irTab(id){
+  tabActual=id;
+  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("activo"));
+  const btn=document.getElementById("tab-btn-"+id);
+  if(btn) btn.classList.add("activo");
+  const c=document.getElementById("mainContent");
+  if(id==="asistencia")    c.innerHTML=renderAsistencia();
+  else if(id==="asistencia_ro") c.innerHTML=renderAsistenciaRO();
+  else if(id==="vinculacion")   c.innerHTML=renderVinculacion();
+  else if(id==="resumen")       c.innerHTML=renderResumen();
+  else if(id==="seguridad")     c.innerHTML=renderSeguridad();
+}
+
+// ══════════════════════════════════════════════════
+// ASISTENCIA (SST — editable)
+// ══════════════════════════════════════════════════
+function initEstadoAsis(){
+  getPersonal().filter(p=>p.activo).forEach(p=>{
+    if(!estadoAsis[p.id]) estadoAsis[p.id]={presente:null,novedad:null,obs:""};
+  });
+}
+
+function renderAsistencia(){
+  const activos=getPersonal().filter(p=>p.activo);
+  const pres=activos.filter(p=>estadoAsis[p.id]?.presente===true).length;
+  const aus=activos.filter(p=>estadoAsis[p.id]?.presente===false).length;
+  const pend=activos.filter(p=>estadoAsis[p.id]?.presente===null).length;
+
+  const tarjetas=activos.map(p=>{
+    const e=estadoAsis[p.id]||{presente:null,novedad:null,obs:""};
+    const esPres=e.presente===true, esAus=e.presente===false;
+    const opts=NOVEDADES_TIPOS.map(n=>`
+      <button class="nov-opt${e.novedad===n.id?' sel':''}" onclick="selNov(${p.id},'${n.id}',this)">
+        ${n.icon} ${n.label}</button>`).join("");
+    return `
+    <div class="trabajador-row${esPres?' presente':esAus?' ausente':''}" id="trow-${p.id}">
+      <div class="trab-top" onclick="toggleAsis(${p.id})">
+        <div class="avatar${esPres?' p':esAus?' a':''}">${iniciales(p.nombre)}</div>
+        <div class="trab-info">
+          <div class="trab-nombre">${p.nombre}</div>
+          <div class="trab-cargo">${p.cargo}</div>
+        </div>
+        <button class="toggle${esPres?' on':' off'}" onclick="event.stopPropagation();toggleAsis(${p.id})"></button>
+      </div>
+      <div class="nov-panel${esAus?' vis':''}" id="npanel-${p.id}">
+        <div class="nov-label">¿Por qué no está en obra?</div>
+        <div class="nov-opts">${opts}</div>
+        <textarea class="nov-obs" rows="2" placeholder="Observación opcional..."
+          onchange="estadoAsis[${p.id}].obs=this.value">${e.obs||""}</textarea>
+      </div>
+    </div>`;
+  }).join("");
+
+  const urlBanner = !getURL() ? `
+    <div class="alert alert-warn">
+      ⚙️ <div><strong>Configuración pendiente</strong> — Pegue la URL del Apps Script para activar el envío a Google Sheets.
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="urlInput" type="url" class="field-input" placeholder="https://script.google.com/macros/s/..." style="font-size:11px;font-family:monospace">
+        <button class="btn btn-sm btn-primary" onclick="guardarURL()">Guardar</button>
+      </div></div>
+    </div>` : "";
+
+  return `
+  ${urlBanner}
+  <div class="contadores">
+    <div class="cnt"><div class="cnt-num" style="color:var(--green)">${pres}</div><div class="cnt-lab">Presentes</div></div>
+    <div class="cnt"><div class="cnt-num" style="color:var(--red)">${aus}</div><div class="cnt-lab">Ausentes</div></div>
+    <div class="cnt"><div class="cnt-num" style="color:var(--blue)">${pend}</div><div class="cnt-lab">Sin marcar</div></div>
+  </div>
+  <button class="btn btn-success btn-block" onclick="todosPresentes()" style="margin-bottom:12px;font-size:14px">
+    ✅ Todos presentes hoy
+  </button>
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Personal activo en obra</div>
+  <div id="listaTrab">${tarjetas}</div>
+  <button class="btn btn-primary btn-block mt8" onclick="enviarAsistencia()">📤 Registrar asistencia del día</button>`;
+}
+
+function toggleAsis(id){
+  if(!estadoAsis[id]) estadoAsis[id]={presente:null,novedad:null,obs:""};
+  const e=estadoAsis[id];
+  e.presente=(e.presente===null||e.presente===true)?false:true;
+  if(e.presente) e.novedad=null;
+  irTab("asistencia");
+}
+function selNov(id,novId,btn){
+  estadoAsis[id].novedad=novId;
+  btn.closest(".nov-opts").querySelectorAll(".nov-opt").forEach(b=>b.classList.remove("sel"));
+  btn.classList.add("sel");
+}
+function todosPresentes(){
+  getPersonal().filter(p=>p.activo).forEach(p=>{ estadoAsis[p.id]={presente:true,novedad:null,obs:""}; });
+  irTab("asistencia");
+}
+function guardarURL(){
+  const v=document.getElementById("urlInput")?.value?.trim();
+  if(!v?.startsWith("https://script.google.com")){alert("URL inválida");return;}
+  localStorage.setItem(LS_URL,v);
+  irTab("asistencia");
+}
+async function enviarAsistencia(){
+  const activos=getPersonal().filter(p=>p.activo);
+  const sinMarcar=activos.filter(p=>!estadoAsis[p.id]||estadoAsis[p.id].presente===null);
+  if(sinMarcar.length){alert("Faltan por marcar:\n"+sinMarcar.map(p=>p.nombre).join("\n"));return;}
+  const sinNov=activos.filter(p=>estadoAsis[p.id].presente===false&&!estadoAsis[p.id].novedad);
+  if(sinNov.length){alert("Seleccione el tipo de ausencia para:\n"+sinNov.map(p=>p.nombre).join("\n"));return;}
+  const fecha=getFechaISO();
+  const pres=activos.filter(p=>estadoAsis[p.id].presente).length;
+  const aus=activos.length-pres;
+  const filas=activos.map(p=>({
+    fecha,nombre:p.nombre,cargo:p.cargo,
+    estado:estadoAsis[p.id].presente?"Presente":"Ausente",
+    novedad:estadoAsis[p.id].novedad?NOVEDADES_TIPOS.find(n=>n.id===estadoAsis[p.id].novedad)?.label||"":"",
+    observacion:estadoAsis[p.id].obs||"",
+    hora:new Date().toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"}),
+    registradoPor:"Yenny P. Vargas (SST)"
+  }));
+  const url=getURL();
+  if(url){
+    document.getElementById("overlayLoad").classList.add("vis");
+    try{ await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"asistencia",registros:filas})}); }
+    catch(e){}
+    document.getElementById("overlayLoad").classList.remove("vis");
+  }
+  mostrarOk("¡Asistencia registrada!","Los datos fueron enviados a Google Sheets.",
+    `<div class="ok-row"><span class="l">Fecha</span><span>${fecha}</span></div>
+     <div class="ok-row"><span class="l">Presentes</span><span>${pres} personas</span></div>
+     <div class="ok-row"><span class="l">Ausentes</span><span>${aus} personas</span></div>
+     <div class="ok-row"><span class="l">Registrado por</span><span>SST</span></div>`);
+  activos.forEach(p=>{ estadoAsis[p.id]={presente:null,novedad:null,obs:""}; });
+}
+
+// ══════════════════════════════════════════════════
+// ASISTENCIA SOLO LECTURA
+// ══════════════════════════════════════════════════
+function renderAsistenciaRO(){
+  const activos=getPersonal().filter(p=>p.activo);
+  const filas=activos.map(p=>`
+    <tr>
+      <td><strong>${p.nombre}</strong></td>
+      <td>${p.cargo}</td>
+      <td><span class="badge b-ok">Activo</span></td>
+      <td class="muted">—</td>
+    </tr>`).join("");
+  return `
+  <div class="alert alert-info">📋 Vista de solo lectura. El registro de asistencia lo realiza la SST cada mañana.</div>
+  <div class="card">
+    <div class="card-title">👥 Personal activo en obra (${activos.length})</div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Nombre</th><th>Cargo</th><th>Estado</th><th>Última novedad</th></tr></thead>
+      <tbody>${filas}</tbody></table>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════
+// VINCULACIÓN
+// ══════════════════════════════════════════════════
+function renderVinculacion(){
+  const pend=getPendientes();
+  const activos=getPersonal().filter(p=>p.activo);
+  const esSSTouDir=["SST","Director de Obra","Director de Proyecto"].includes(rolActual.rol);
+
+  const formNuevo = rolActual.rol==="SST" ? `
+  <div class="card">
+    <div class="card-title">➕ Solicitar ingreso de nuevo trabajador</div>
+    <div class="grid-2">
+      <div class="field-group"><label class="field-label">Nombre completo</label>
+        <input class="field-input" id="nv-nombre" placeholder="Nombre completo"></div>
+      <div class="field-group"><label class="field-label">Cédula</label>
+        <input class="field-input" id="nv-cedula" type="number" placeholder="Número de cédula"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field-group"><label class="field-label">Cargo</label>
+        <select class="field-input" id="nv-cargo">
+          <option value="">— Seleccione —</option>
+          <option>Topógrafo</option><option>Aux. Topográfico</option>
+          <option>Residente de Obra</option><option>Operador de Maquinaria</option>
+          <option>Auxiliar Administrativo</option><option>Operador</option>
+          <option>Oficial</option><option>Ayudante</option><option>Otro</option>
+        </select></div>
+      <div class="field-group"><label class="field-label">Salario base</label>
+        <input class="field-input" id="nv-salario" type="number" placeholder="Ej: 1750905"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field-group"><label class="field-label">Fecha de ingreso</label>
+        <input class="field-input" id="nv-fecha" type="date"></div>
+      <div class="field-group"><label class="field-label">Exámenes médicos</label>
+        <select class="field-input" id="nv-examenes">
+          <option value="">— Seleccione —</option>
+          <option value="si">✅ Realizados y aptos</option>
+          <option value="pendiente">⏳ En proceso</option>
+        </select></div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="solicitarIngreso()">📨 Enviar solicitud de vinculación</button>
+  </div>` : "";
+
+  const pendCards = pend.length===0 ? "" : `
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">⏳ Pendientes de aprobación (${pend.length})</div>
+  ${pend.map(emp=>{
+    const chipObra=`<div class="chip ${emp.aprobadoObra?'chip-ok':'chip-pend'}">${emp.aprobadoObra?"✅ Raúl Echeverri":"⏳ Raúl Echeverri"}</div>`;
+    const chipProy=`<div class="chip ${emp.aprobadoProy?'chip-ok':'chip-pend'}">${emp.aprobadoProy?"✅ Andrés Chaves":"⏳ Andrés Chaves"}</div>`;
+    const btnObra=emp.aprobadoObra
+      ? `<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>`
+      : (rolActual.rol==="Director de Obra"||rolActual.rol==="Director de Proyecto"
+          ? `<button class="btn-aprov btn-aprov-obra" onclick="aprobarObra(${emp.id})">👷 Aprobar — Raúl Echeverri</button>`
+          : `<button class="btn-aprov btn-aprov-obra" disabled style="opacity:.5">⏳ Pendiente Dir. Obra</button>`);
+    const btnProy=emp.aprobadoProy
+      ? `<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>`
+      : (rolActual.rol==="Director de Proyecto"
+          ? `<button class="btn-aprov btn-aprov-proy" onclick="aprobarProy(${emp.id})">💼 Aprobar — Andrés Chaves</button>`
+          : `<button class="btn-aprov btn-aprov-proy" disabled style="opacity:.5">⏳ Pendiente Dir. Proyecto</button>`);
+    const btnRech=esSSTouDir
+      ? `<button class="btn-aprov btn-rechazar" onclick="rechazar(${emp.id})">✖ Rechazar solicitud</button>` : "";
+    const salFmt="$"+parseInt(emp.salario||0).toLocaleString("es-CO");
+    const exIcon=emp.examenes==="si"?"✅ Aptos":"⏳ En proceso";
+    return `
+    <div class="pend-card">
+      <div class="pend-header">
+        <span class="badge b-warn">PENDIENTE</span>
+        <span class="pend-nombre">${emp.nombre}</span>
+      </div>
+      <div class="pend-body">
+        <div class="pend-datos">
+          <div class="pend-dato"><strong>${emp.cargo||"—"}</strong>Cargo</div>
+          <div class="pend-dato"><strong>${salFmt}</strong>Salario</div>
+          <div class="pend-dato"><strong>${emp.cedula||"—"}</strong>Cédula</div>
+          <div class="pend-dato"><strong>${emp.fechaIngreso||"—"}</strong>Fecha ingreso</div>
+          <div class="pend-dato"><strong>${exIcon}</strong>Exámenes médicos</div>
+          <div class="pend-dato"><strong>${emp.solicitadoPor||"SST"}</strong>Solicitado por</div>
+        </div>
+        <div class="estado-chips">${chipObra}${chipProy}</div>
+        <div class="aprov-btns">${btnObra}${btnProy}${btnRech}</div>
+      </div>
+    </div>`;
+  }).join("")}`;
+
+  const activosSection=`
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">✅ Personal activo en obra (${activos.length})</div>
+  <div class="table-wrap">
+    <table><thead><tr><th>#</th><th>Nombre</th><th>Cargo</th><th>Salario</th><th>Ingreso</th></tr></thead>
+    <tbody>${activos.map((p,i)=>`
+      <tr><td>${i+1}</td><td><strong>${p.nombre}</strong></td><td>${p.cargo}</td>
+      <td>$${p.salario.toLocaleString("es-CO")}</td>
+      <td class="muted">${p.fechaIngreso||"—"}</td></tr>`).join("")}
+    </tbody></table>
+  </div>`;
+
+  return formNuevo + pendCards + activosSection;
+}
+
+function solicitarIngreso(){
+  const nombre=document.getElementById("nv-nombre")?.value?.trim();
+  const cedula=document.getElementById("nv-cedula")?.value?.trim();
+  const cargo=document.getElementById("nv-cargo")?.value;
+  const salario=document.getElementById("nv-salario")?.value?.trim();
+  const fecha=document.getElementById("nv-fecha")?.value;
+  const exams=document.getElementById("nv-examenes")?.value;
+  if(!nombre||!cedula||!cargo||!salario||!fecha||!exams){alert("Complete todos los campos.");return;}
+  const pend=getPendientes();
+  pend.push({id:Date.now(),nombre,cedula,cargo,salario:parseInt(salario),fechaIngreso:fecha,
+    examenes:exams,solicitadoPor:rolActual.nombre+" (SST)",aprobadoObra:false,aprobadoProy:false});
+  setPendientes(pend);
+  mostrarOk("¡Solicitud enviada!",`Se notificará a Raúl Echeverri y Andrés Chaves para su aprobación.`,
+    `<div class="ok-row"><span class="l">Trabajador</span><span>${nombre}</span></div>
+     <div class="ok-row"><span class="l">Cargo</span><span>${cargo}</span></div>`);
+}
+
+function aprobarObra(id){
+  const pend=getPendientes();
+  const emp=pend.find(p=>p.id===id);
+  if(!emp)return;
+  emp.aprobadoObra=true;
+  setPendientes(pend);
+  verificarActivacion(id);
+  irTab("vinculacion");
+}
+function aprobarProy(id){
+  const pend=getPendientes();
+  const emp=pend.find(p=>p.id===id);
+  if(!emp)return;
+  emp.aprobadoProy=true;
+  setPendientes(pend);
+  verificarActivacion(id);
+  irTab("vinculacion");
+}
+function rechazar(id){
+  if(!confirm("¿Rechazar esta solicitud?"))return;
+  setPendientes(getPendientes().filter(p=>p.id!==id));
+  irTab("vinculacion");
+}
+function verificarActivacion(id){
+  const pend=getPendientes();
+  const emp=pend.find(p=>p.id===id);
+  if(!emp||!emp.aprobadoObra||!emp.aprobadoProy)return;
+  const personal=getPersonal();
+  personal.push({id:Date.now(),nombre:emp.nombre,cargo:emp.cargo,cedula:emp.cedula,
+    salario:emp.salario,fechaIngreso:emp.fechaIngreso,
+    eps:"—",pension:"—",arl:"Positiva",ccf:"Comfaboy",activo:true});
+  setPersonal(personal);
+  setPendientes(pend.filter(p=>p.id!==id));
+  estadoAsis[emp.id]={presente:null,novedad:null,obs:""};
+  alert(`🎉 ${emp.nombre} activado en el sistema de nómina.`);
+}
+
+// ══════════════════════════════════════════════════
+// RESUMEN NÓMINA
+// ══════════════════════════════════════════════════
+function renderResumen(){
+  const personal=getPersonal().filter(p=>p.activo);
+  const SMMLV=1300000, AUX_T=162000;
+  const filas=personal.map(p=>{
+    const auxT=p.salario<=2*SMMLV?AUX_T:0;
+    const deducSalud=p.salario*0.04;
+    const deducPens=p.salario*0.04;
+    const neto=p.salario+auxT-deducSalud-deducPens;
+    const fmtCOP=v=>"$"+Math.round(v).toLocaleString("es-CO");
+    return `<tr>
+      <td><strong>${p.nombre}</strong><br><span class="muted">${p.cargo}</span></td>
+      <td>${fmtCOP(p.salario)}</td>
+      <td>${auxT>0?fmtCOP(auxT):"—"}</td>
+      <td style="color:var(--red)">${fmtCOP(deducSalud+deducPens)}</td>
+      <td style="color:var(--green);font-weight:600">${fmtCOP(neto)}</td>
+      <td><span class="badge b-ok">Activo</span></td>
+    </tr>`;
+  }).join("");
+  const totalSal=personal.reduce((s,p)=>s+p.salario,0);
+  return `
+  <div class="alert alert-warn">📌 Los días trabajados se ingresan al Excel de nómina. Este resumen muestra el cálculo base para un mes completo (30 días).</div>
+  <div class="stat-grid">
+    <div class="stat-box"><div class="stat-label">Personal activo</div><div class="stat-val azul">${personal.length}</div></div>
+    <div class="stat-box"><div class="stat-label">Masa salarial</div><div class="stat-val">${("$"+totalSal.toLocaleString("es-CO"))}</div></div>
+    <div class="stat-box"><div class="stat-label">Pendientes vinc.</div><div class="stat-val rojo">${getPendientes().length}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">💰 Resumen de nómina base</div>
+    <div class="table-wrap">
+      <table class="ss-tabla">
+        <thead><tr><th>Trabajador</th><th>Salario base</th><th>Aux. transp.</th><th>Deducciones (8%)</th><th>Neto estimado</th><th>Estado</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════
+// SEGURIDAD SOCIAL (CONSTRUCTHOR y Finanzas)
+// ══════════════════════════════════════════════════
+function renderSeguridad(){
+  const personal=getPersonal().filter(p=>p.activo);
+  const pendSS=personal.filter(p=>p.eps?.includes("Pendiente")||p.pension?.includes("Pendiente"));
+  const alerta=pendSS.length>0?`
+    <div class="alert alert-warn">⚠️ <div><strong>${pendSS.length} trabajador(es) con afiliaciones pendientes:</strong>
+    ${pendSS.map(p=>`<div style="margin-top:4px">• ${p.nombre} — EPS y/o Pensión sin registrar</div>`).join("")}
+    </div></div>` : "";
+  const filas=personal.map(p=>`
+    <tr>
+      <td><strong>${p.nombre}</strong><br><span class="muted">${p.cargo}</span></td>
+      <td>${p.eps?.includes("Pendiente")?`<span class="pend-tag">⚠️ Pendiente</span>`:p.eps}</td>
+      <td>${p.pension?.includes("Pendiente")?`<span class="pend-tag">⚠️ Pendiente</span>`:p.pension}</td>
+      <td><span class="ok-tag">${p.arl||"Positiva"}</span></td>
+      <td><span class="ok-tag">${p.ccf||"Comfaboy"}</span></td>
+    </tr>`).join("");
+  return `
+  ${alerta}
+  <div class="card">
+    <div class="card-title">🏥 Afiliaciones de seguridad social</div>
+    <div class="table-wrap">
+      <table class="ss-tabla">
+        <thead><tr><th>Trabajador</th><th>EPS</th><th>Pensión</th><th>ARL</th><th>CCF</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <div class="muted mt8">ARL: Positiva · CCF: Comfaboy · Aplica a todo el personal</div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════
+// UTILIDADES
+// ══════════════════════════════════════════════════
+function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
+function getFechaISO(){
+  const h=new Date();
+  return `${h.getDate().toString().padStart(2,"0")}/${(h.getMonth()+1).toString().padStart(2,"0")}/${h.getFullYear()}`;
+}
+function mostrarOk(titulo,sub,detalle){
+  document.getElementById("okTitle").textContent=titulo;
+  document.getElementById("okSub").textContent=sub;
+  document.getElementById("okDetail").innerHTML=detalle;
+  document.getElementById("overlayOk").classList.add("vis");
+}
+function cerrarOverlayOk(){
+  document.getElementById("overlayOk").classList.remove("vis");
+  irTab(tabActual);
+}
+</script>
+</body>
+</html>
