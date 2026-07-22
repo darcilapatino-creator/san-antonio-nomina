@@ -278,24 +278,41 @@ const TAB_LABELS = {
 };
 
 const PERSONAL = [
-  {id:1, nombre:"Jeisson Andres Celis Rojas",      cargo:"Topógrafo",              salario:2400000, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:2, nombre:"Miguel Angel Pedraza Ponguta",    cargo:"Aux. Topográfico",       salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones", arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:3, nombre:"Yenny Paola Vargas Sierra",       cargo:"Residente SISO",         salario:2500000, eps:"Sanitas",    pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:4, nombre:"Jhon Jairo González González",    cargo:"Residente de Obra",      salario:4000000, eps:"Sanitas",    pension:"Colpensiones", arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:5, nombre:"Jesús David Rodríguez Vargas",    cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:6, nombre:"Fredy Alfonso Naranjo Corredor",  cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:7, nombre:"Jhon Alexander Gonzalez Rincon",  cargo:"Aux. Administrativo",    salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:8, nombre:"Jose Luis Gaitan",                cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",     arl:"Positiva", ccf:"Comfaboy", activo:true},
-  {id:9, nombre:"Braulio Antonio Cujaban Hurtado", cargo:"Operador",               salario:1750905, eps:"⚠️ Pendiente", pension:"⚠️ Pendiente", arl:"Positiva", ccf:"Comfaboy", activo:true},
+  {id:1,  nombre:"Jeisson Andres Celis Rojas",       cargo:"Topógrafo",              salario:2400000, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", activo:true},
+  {id:2,  nombre:"Miguel Angel Pedraza Ponguta",     cargo:"Aux. Topográfico",       salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", activo:true},
+  {id:3,  nombre:"Yenny Paola Vargas Sierra",        cargo:"Residente SISO",         salario:2500000, eps:"Sanitas",    pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", activo:true},
+  {id:4,  nombre:"Jhon Jairo González González",     cargo:"Residente de Obra",      salario:4000000, eps:"Sanitas",    pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", activo:true},
+  {id:5,  nombre:"Jesús David Rodríguez Vargas",     cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", activo:true},
+  {id:6,  nombre:"Fredy Alfonso Naranjo Corredor",   cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"30/06/2026", fechaRetiro:"18/07/2026", activo:false},
+  {id:7,  nombre:"Jhon Alexander Gonzalez Rincon",   cargo:"Aux. Administrativo",    salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
+  {id:8,  nombre:"Andres Felipe Bayona Tirano",      cargo:"Oficial",                salario:2400000, eps:"Coop Salud", pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
+  {id:9,  nombre:"Jeisson Vladimir Pedraza Huerfano",cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Protección",  arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
+  {id:10, nombre:"Alvaro Saul Rodriguez Velasco",    cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
+  {id:11, nombre:"Jose Luis Lozano",                 cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
+  {id:12, nombre:"Steven Ariel Cardenas Sierra",     cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"21/07/2026", activo:false},
+  {id:13, nombre:"Cristian Ivan Hernandez Fonseca",  cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"07/07/2026", activo:true},
+  {id:14, nombre:"Joselin Gonzalez Gonzalez",        cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"07/07/2026", activo:true},
+  {id:15, nombre:"Diego Fernando Pedraza Ponguta",   cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"08/07/2026", activo:true},
+  {id:16, nombre:"Miguel Arguello Mesa",             cargo:"Auxiliar Operativo",     salario:1750905, eps:"Famisanar",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"08/07/2026", activo:true},
+  {id:17, nombre:"Yeison David Perez Chaparro",      cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"08/07/2026", activo:true},
+  {id:18, nombre:"Evangelista Chaparro Diaz",        cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"11/07/2026", activo:true},
+  {id:19, nombre:"Fabio Gomez Cardenas",             cargo:"Auxiliar Operativo",     salario:1750905, eps:"Sanitas",    pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"14/07/2026", activo:true},
+  {id:20, nombre:"Jaider Guillermo Quijano",         cargo:"Auxiliar Operativo",     salario:1750905, eps:"Sanitas",    pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"14/07/2026", activo:true},
+  {id:21, nombre:"Andres Felipe Gonzalez Sanchez",   cargo:"Aux. Topográfico",       salario:1750905, eps:"Sanitas",    pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"15/07/2026", activo:true},
+  {id:22, nombre:"Luz Angelica Molina Chaparro",     cargo:"Aux. Topográfico",       salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"17/07/2026", activo:true},
 ];
 
 const NOVEDADES_TIPOS = [
-  {id:"incapacidad",   icon:"🏥", label:"Incapacidad médica"},
-  {id:"permiso",       icon:"✍️",  label:"Permiso aprobado"},
-  {id:"injustificada", icon:"❌",  label:"Ausencia sin justificación"},
-  {id:"tarde",         icon:"⏰", label:"Llegada tarde"},
-  {id:"accidente",     icon:"🚨", label:"Accidente de trabajo"},
+  {id:"incapacidad",   icon:"🏥", label:"Incapacidad médica",          retiro:false},
+  {id:"permiso",       icon:"✍️",  label:"Permiso aprobado",            retiro:false},
+  {id:"injustificada", icon:"❌",  label:"Ausencia sin justificación",  retiro:false},
+  {id:"tarde",         icon:"⏰", label:"Llegada tarde",               retiro:false},
+  {id:"accidente",     icon:"🚨", label:"Accidente de trabajo",        retiro:false},
+  {id:"renuncia",      icon:"🚪", label:"Retiro voluntario (renuncia)",retiro:true},
+  {id:"despido",       icon:"📋", label:"Desvinculación (despido)",    retiro:true},
 ];
+
+const LS_RETIROS = "nom_retiros";
 
 const LS_PERSONAL   = "nom_personal";
 const LS_PENDIENTES = "nom_pendientes";
@@ -458,7 +475,26 @@ function selNov(id,novId,btn){
   estadoAsis[id].novedad=novId;
   btn.closest(".nov-opts").querySelectorAll(".nov-opt").forEach(b=>b.classList.remove("sel"));
   btn.classList.add("sel");
+  // Si es retiro, mostrar advertencia visual
+  const esRetiro=NOVEDADES_TIPOS.find(n=>n.id===novId)?.retiro;
+  const panel=btn.closest(".nov-panel");
+  let warn=panel.querySelector(".retiro-warn");
+  if(esRetiro){
+    if(!warn){
+      warn=document.createElement("div");
+      warn.className="retiro-warn";
+      warn.style.cssText="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:6px;padding:10px 12px;margin-top:8px;font-size:12px;color:#991b1b;font-weight:500";
+      warn.innerHTML="⚠️ Al registrar esta asistencia el trabajador quedará <strong>desactivado del sistema</strong> y Finanzas recibirá una notificación.";
+      panel.appendChild(warn);
+    }
+  } else { if(warn) warn.remove(); }
 }
+
+function getRetiros(){
+  const s=localStorage.getItem(LS_RETIROS);
+  return s?JSON.parse(s):[];
+}
+function setRetiros(r){ localStorage.setItem(LS_RETIROS,JSON.stringify(r)); }
 function todosPresentes(){
   getPersonal().filter(p=>p.activo).forEach(p=>{ estadoAsis[p.id]={presente:true,novedad:null,obs:""}; });
   irTab("asistencia");
@@ -492,6 +528,33 @@ async function enviarAsistencia(){
     try{ await fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"asistencia",registros:filas})}); }
     catch(e){}
     document.getElementById("overlayLoad").classList.remove("vis");
+  }
+  // Procesar retiros
+  const retiros=filas.filter(f=>{
+    const tipo=NOVEDADES_TIPOS.find(n=>n.label===f.novedad);
+    return tipo?.retiro;
+  });
+  if(retiros.length>0){
+    const personal=getPersonal();
+    const histRetiros=getRetiros();
+    retiros.forEach(f=>{
+      const idx=personal.findIndex(p=>p.nombre===f.nombre);
+      if(idx>=0){
+        histRetiros.push({
+          nombre:personal[idx].nombre,
+          cargo:personal[idx].cargo,
+          salario:personal[idx].salario,
+          motivo:f.novedad,
+          fecha:f.fecha,
+          observacion:f.observacion||"—",
+          registradoPor:f.registradoPor
+        });
+        personal[idx].activo=false;
+        delete estadoAsis[personal[idx].id];
+      }
+    });
+    setPersonal(personal);
+    setRetiros(histRetiros);
   }
   mostrarOk("¡Asistencia registrada!","Los datos fueron enviados a Google Sheets.",
     `<div class="ok-row"><span class="l">Fecha</span><span>${fecha}</span></div>
@@ -606,6 +669,8 @@ function renderVinculacion(){
     </div>`;
   }).join("")}`;
 
+  const todos=getPersonal();
+  const retirados=todos.filter(p=>!p.activo);
   const activosSection=`
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">✅ Personal activo en obra (${activos.length})</div>
   <div class="table-wrap">
@@ -615,7 +680,21 @@ function renderVinculacion(){
       <td>$${p.salario.toLocaleString("es-CO")}</td>
       <td class="muted">${p.fechaIngreso||"—"}</td></tr>`).join("")}
     </tbody></table>
-  </div>`;
+  </div>
+  ${retirados.length>0?`
+  <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">🔴 Retirados (${retirados.length})</div>
+  <div class="table-wrap">
+    <table><thead><tr><th>Nombre</th><th>Cargo</th><th>Ingreso</th><th>Retiro</th><th>Estado</th></tr></thead>
+    <tbody>${retirados.map(p=>`
+      <tr style="background:#fef2f2">
+        <td><strong style="color:var(--red)">${p.nombre}</strong></td>
+        <td>${p.cargo}</td>
+        <td class="muted">${p.fechaIngreso||"—"}</td>
+        <td class="muted">${p.fechaRetiro||"—"}</td>
+        <td><span class="badge b-aus">Retirado</span></td>
+      </tr>`).join("")}
+    </tbody></table>
+  </div>`:""}  `;
 
   return formNuevo + pendCards + activosSection;
 }
@@ -696,12 +775,39 @@ function renderResumen(){
     </tr>`;
   }).join("");
   const totalSal=personal.reduce((s,p)=>s+p.salario,0);
+  const retiros=getRetiros();
+
+  // Alerta de retiros — solo visible para Finanzas y Director de Proyecto
+  const alertaRetiros = retiros.length>0 ? `
+  <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+      🔔 ALERTA — ${retiros.length} retiro(s) registrado(s) pendiente(s) de liquidación
+    </div>
+    ${retiros.map((r,i)=>`
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;border:1px solid #fecaca;display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#1a1a18">${r.nombre}</div>
+        <div style="font-size:11px;color:#64748b">${r.cargo} · $${r.salario.toLocaleString("es-CO")}</div>
+        <div style="font-size:11px;margin-top:4px">
+          <span style="background:#fef2f2;color:#991b1b;padding:2px 8px;border-radius:20px;font-weight:600">${r.motivo}</span>
+          <span style="color:#94a3b8;margin-left:6px">${r.fecha}</span>
+        </div>
+        ${r.observacion&&r.observacion!=="—"?`<div style="font-size:11px;color:#64748b;margin-top:4px;font-style:italic">"${r.observacion}"</div>`:""}
+        <div style="font-size:10px;color:#94a3b8;margin-top:4px">Registrado por: ${r.registradoPor}</div>
+      </div>
+      <button onclick="marcarRetirosVisto(${i})" style="background:transparent;border:1px solid #fca5a5;border-radius:6px;padding:4px 10px;font-size:11px;color:#991b1b;cursor:pointer;white-space:nowrap">
+        ✓ Visto
+      </button>
+    </div>`).join("")}
+  </div>` : "";
+
   return `
+  ${alertaRetiros}
   <div class="alert alert-warn">📌 Los días trabajados se ingresan al Excel de nómina. Este resumen muestra el cálculo base para un mes completo (30 días).</div>
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Personal activo</div><div class="stat-val azul">${personal.length}</div></div>
     <div class="stat-box"><div class="stat-label">Masa salarial</div><div class="stat-val">${("$"+totalSal.toLocaleString("es-CO"))}</div></div>
-    <div class="stat-box"><div class="stat-label">Pendientes vinc.</div><div class="stat-val rojo">${getPendientes().length}</div></div>
+    <div class="stat-box"><div class="stat-label">Retiros pendientes</div><div class="stat-val rojo">${retiros.length}</div></div>
   </div>
   <div class="card">
     <div class="card-title">💰 Resumen de nómina base</div>
@@ -749,6 +855,13 @@ function renderSeguridad(){
 // ══════════════════════════════════════════════════
 // UTILIDADES
 // ══════════════════════════════════════════════════
+function marcarRetirosVisto(idx){
+  const retiros=getRetiros();
+  retiros.splice(idx,1);
+  setRetiros(retiros);
+  irTab(tabActual);
+}
+
 function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
 function getFechaISO(){
   const h=new Date();
