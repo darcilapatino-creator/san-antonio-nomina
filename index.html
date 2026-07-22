@@ -261,18 +261,19 @@ select.field-input{cursor:pointer}
 // CONFIGURACIÓN
 // ══════════════════════════════════════════════════
 const ROLES = {
-  "5647": { nombre:"Yenny P. Vargas", rol:"SST",               tabs:["asistencia","vinculacion"] },
-  "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",  tabs:["vinculacion","asistencia_ro"] },
-  "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["vinculacion","asistencia_ro","resumen"] },
-  "4829": { nombre:"Finanzas",        rol:"Finanzas",           tabs:["resumen","seguridad"] },
-  "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",       tabs:["resumen","seguridad"] },
-  "7284": { nombre:"Residente",       rol:"Residente de Obra",  tabs:["asistencia_ro"] },
+  "5647": { nombre:"Yenny P. Vargas", rol:"SST",                  tabs:["asistencia","horas_extras","vinculacion"] },
+  "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",     tabs:["horas_extras","vinculacion","asistencia_ro"] },
+  "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["horas_extras","vinculacion","asistencia_ro","resumen"] },
+  "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","horas_extras","seguridad"] },
+  "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",          tabs:["resumen","horas_extras","seguridad"] },
+  "7284": { nombre:"Residente",       rol:"Residente de Obra",     tabs:["asistencia_ro"] },
 };
 
 const TAB_LABELS = {
   asistencia:    { icon:"✅", label:"Asistencia" },
   asistencia_ro: { icon:"📋", label:"Asistencia" },
   vinculacion:   { icon:"👤", label:"Vinculación" },
+  horas_extras:  { icon:"⏱️", label:"Horas Extras" },
   resumen:       { icon:"📊", label:"Resumen Nómina" },
   seguridad:     { icon:"🏥", label:"Seguridad Social" },
 };
@@ -388,15 +389,25 @@ function renderTabs(){
   `).join("");
 }
 
+// Constantes jornada
+const HORA_INICIO_JORNADA = 7.5;  // 7:30 AM
+const HORA_FIN_JORNADA    = 16.5; // 4:30 PM entre semana
+const HORA_FIN_SABADO     = 11.5; // 11:30 AM sábado
+const LS_HORAS = "nom_horas_extras";
+
+function getHorasExtras(){ const s=localStorage.getItem(LS_HORAS); return s?JSON.parse(s):[]; }
+function setHorasExtras(h){ localStorage.setItem(LS_HORAS,JSON.stringify(h)); }
+
 function irTab(id){
   tabActual=id;
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("activo"));
   const btn=document.getElementById("tab-btn-"+id);
   if(btn) btn.classList.add("activo");
   const c=document.getElementById("mainContent");
-  if(id==="asistencia")    c.innerHTML=renderAsistencia();
+  if(id==="asistencia")         c.innerHTML=renderAsistencia();
   else if(id==="asistencia_ro") c.innerHTML=renderAsistenciaRO();
   else if(id==="vinculacion")   c.innerHTML=renderVinculacion();
+  else if(id==="horas_extras")  c.innerHTML=renderHorasExtras();
   else if(id==="resumen")       c.innerHTML=renderResumen();
   else if(id==="seguridad")     c.innerHTML=renderSeguridad();
 }
@@ -802,8 +813,32 @@ function renderResumen(){
     </div>`).join("")}
   </div>` : "";
 
+  // Horas extras aprobadas por trabajador
+  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  const heResumen={};
+  heAprobadas.forEach(reg=>{
+    reg.detalle.forEach(d=>{
+      if(!heResumen[d.nombre]) heResumen[d.nombre]={horas:0,valor:0};
+      heResumen[d.nombre].horas+=d.horas;
+      heResumen[d.nombre].valor+=d.valor;
+    });
+  });
+  const alertaHE=Object.keys(heResumen).length>0?`
+  <div style="background:var(--lblue);border:1.5px solid #93c5fd;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:10px">⏱️ Horas extras aprobadas — pendientes de liquidar</div>
+    <div class="table-wrap"><table class="ss-tabla">
+      <thead><tr><th>Trabajador</th><th>Total horas</th><th>Valor a pagar</th></tr></thead>
+      <tbody>${Object.entries(heResumen).map(([nom,v])=>`
+        <tr><td><strong>${nom}</strong></td>
+        <td style="text-align:center">${v.horas.toFixed(1)}h</td>
+        <td style="text-align:right;font-weight:600;color:var(--blue)">$${v.valor.toLocaleString("es-CO")}</td></tr>`).join("")}
+      </tbody>
+    </table></div>
+  </div>` : "";
+
   return `
   ${alertaRetiros}
+  ${alertaHE}
   <div class="alert alert-warn">📌 Los días trabajados se ingresan al Excel de nómina. Este resumen muestra el cálculo base para un mes completo (30 días).</div>
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Personal activo</div><div class="stat-val azul">${personal.length}</div></div>
@@ -861,6 +896,327 @@ function marcarRetirosVisto(idx){
   retiros.splice(idx,1);
   setRetiros(retiros);
   irTab(tabActual);
+}
+
+// ══════════════════════════════════════════════════
+// HORAS EXTRAS
+// ══════════════════════════════════════════════════
+
+// Convierte "HH:MM" a número decimal (ej: "14:30" → 14.5)
+function horaADecimal(str){
+  if(!str) return 0;
+  const [h,m]=str.split(":").map(Number);
+  return h+(m||0)/60;
+}
+
+// Calcula recargo según tipo de día y hora
+function calcularRecargo(tipo, horaInicio, horaFin){
+  // tipo: "semana" | "sabado" | "domingo"
+  const hrs = horaFin - horaInicio;
+  if(hrs<=0) return {horas:0, pct:0, tipo_recargo:""};
+
+  let pct=0, tipo_recargo="", horasExtra=hrs;
+
+  if(tipo==="semana"){
+    // Extra diurna: 4:30 PM - 9 PM → 25% | Extra nocturna: después 9 PM → 75%
+    const corte=21;
+    if(horaInicio>=corte){ pct=0.75; tipo_recargo="Extra nocturna (75%)"; }
+    else if(horaFin<=corte){ pct=0.25; tipo_recargo="Extra diurna (25%)"; }
+    else{
+      const hDiurna=corte-horaInicio;
+      const hNoct=horaFin-corte;
+      pct=(hDiurna*0.25+hNoct*0.75)/hrs;
+      tipo_recargo="Extra mixta (diurna+nocturna)";
+    }
+  } else if(tipo==="sabado"){
+    // Jornada normal sábado: 7:30 AM - 11:30 AM
+    // Solo es extra lo que supere las 11:30 AM
+    const finNormal=HORA_FIN_SABADO; // 11.5
+    const inicioExtra=Math.max(horaInicio, finNormal);
+    horasExtra=horaFin-inicioExtra;
+    if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:30-11:30)"};
+    pct=0.75; tipo_recargo="Extra sábado (75%)";
+  } else if(tipo==="domingo"){
+    const corte=21;
+    if(horaFin<=corte){ pct=0.75; tipo_recargo="Dominical diurno (75%)"; }
+    else { pct=1.10; tipo_recargo="Dominical nocturno (110%)"; }
+  }
+  return {horas:Math.round(horasExtra*100)/100, pct, tipo_recargo};
+}
+
+function calcularValorHE(salario, horas, pct){
+  const valorHora = salario/240; // 30 días x 8 horas
+  return Math.round(valorHora*(1+pct)*horas);
+}
+
+// Estado temporal del registro de horas extras
+let heEstado = {
+  fecha:"", tipo:"semana",
+  horaInicio:"", horaFin:"",
+  trabajadores:{} // id → {incluido, horaInicio, horaFin}
+};
+
+function renderHorasExtras(){
+  const esSSTouDir=["SST","Director de Obra","Director de Proyecto"].includes(rolActual.rol);
+  const esAprobador=["Director de Obra","Director de Proyecto"].includes(rolActual.rol);
+  const esFinanzas=["Finanzas","CONSTRUCTHOR"].includes(rolActual.rol);
+
+  const pendientes=getHorasExtras().filter(h=>h.estado==="pendiente");
+  const aprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+
+  // Formulario de registro (SST)
+  const formRegistro = rolActual.rol==="SST" ? `
+  <div class="card">
+    <div class="card-title">⏱️ Registrar horas extras</div>
+    <div class="grid-2">
+      <div class="field-group">
+        <label class="field-label">Fecha</label>
+        <input class="field-input" type="date" id="he-fecha" onchange="heActualizarFecha(this.value)">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Tipo de jornada</label>
+        <select class="field-input" id="he-tipo" onchange="heActualizarTipo(this.value)">
+          <option value="semana">Entre semana (extra)</option>
+          <option value="sabado">Sábado</option>
+          <option value="domingo">Domingo / Festivo</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="field-group">
+        <label class="field-label">⏰ Hora inicio (para todos)</label>
+        <input class="field-input" type="time" id="he-hora-inicio" value="16:30"
+          onchange="heActualizarHoraGlobal('inicio',this.value)">
+      </div>
+      <div class="field-group">
+        <label class="field-label">⏰ Hora fin (para todos)</label>
+        <input class="field-input" type="time" id="he-hora-fin"
+          onchange="heActualizarHoraGlobal('fin',this.value)">
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:12px 0 8px">
+      Personal — desmarque quienes NO trabajaron / ajuste hora individual si llegaron diferente
+    </div>
+    <div id="he-lista-trab"></div>
+    <button class="btn btn-primary btn-block mt8" onclick="heEnviar()">📤 Enviar para aprobación de directores</button>
+  </div>` : "";
+
+  // Pendientes de aprobación
+  const pendCard = pendientes.length>0 && (esAprobador||esSSTouDir) ? `
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+    ⏳ Pendientes de aprobación (${pendientes.length})
+  </div>
+  ${pendientes.map(reg=>{
+    const chipObra=`<div class="chip ${reg.aprobadoObra?'chip-ok':'chip-pend'}">${reg.aprobadoObra?"✅ Raúl Echeverri":"⏳ Raúl Echeverri"}</div>`;
+    const chipProy=`<div class="chip ${reg.aprobadoProy?'chip-ok':'chip-pend'}">${reg.aprobadoProy?"✅ Andrés Chaves":"⏳ Andrés Chaves"}</div>`;
+    const btnObra = esAprobador && rolActual.rol==="Director de Obra" && !reg.aprobadoObra
+      ? `<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">👷 Aprobar — Raúl Echeverri</button>`
+      : `<button class="btn-aprov btn-aprov-obra${reg.aprobadoObra?' aprobado':''}" disabled>${reg.aprobadoObra?"✅ Raúl aprobó":"⏳ Dir. Obra"}</button>`;
+    const btnProy = rolActual.rol==="Director de Proyecto" && !reg.aprobadoProy
+      ? `<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">💼 Aprobar — Andrés Chaves</button>`
+      : `<button class="btn-aprov btn-aprov-proy${reg.aprobadoProy?' aprobado':''}" disabled>${reg.aprobadoProy?"✅ Andrés aprobó":"⏳ Dir. Proyecto"}</button>`;
+    const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Domingo/Festivo";
+    const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
+    const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+    return `
+    <div class="pend-card">
+      <div class="pend-header">
+        <span class="badge b-warn">PENDIENTE</span>
+        <span class="pend-nombre">${reg.fecha} · ${tipoLabel}</span>
+      </div>
+      <div class="pend-body">
+        <div class="pend-datos">
+          <div class="pend-dato"><strong>${reg.detalle.length} trabajadores</strong>Con horas extras</div>
+          <div class="pend-dato"><strong>${totalHrs} horas</strong>Total horas</div>
+          <div class="pend-dato"><strong>$${totalVal.toLocaleString("es-CO")}</strong>Valor estimado</div>
+          <div class="pend-dato"><strong>${reg.registradoPor}</strong>Registrado por</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Trabajador</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th></tr></thead>
+            <tbody>${reg.detalle.map(d=>`
+              <tr style="border-top:1px solid #e2e8f0">
+                <td style="padding:4px 8px">${d.nombre}</td>
+                <td style="text-align:center">${d.horaInicio}</td>
+                <td style="text-align:center">${d.horaFin}</td>
+                <td style="text-align:center">${d.horas}h</td>
+                <td style="text-align:center;font-size:10px">${d.tipo_recargo}</td>
+                <td style="text-align:right;font-weight:600">$${d.valor.toLocaleString("es-CO")}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div class="estado-chips">${chipObra}${chipProy}</div>
+        <div class="aprov-btns">
+          <div class="aprobacion-fila">${btnObra}${btnProy}</div>
+          ${esSSTouDir?`<button class="btn-aprov btn-rechazar" onclick="heRechazar(${reg.id})">✖ Rechazar registro</button>`:""}
+        </div>
+      </div>
+    </div>`;
+  }).join("")}` : "";
+
+  // Historial aprobadas
+  const historial = aprobadas.length>0 ? `
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">
+    ✅ Horas extras aprobadas (${aprobadas.length} registros)
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th><th>Valor total</th><th>Estado</th></tr></thead>
+      <tbody>${aprobadas.map(reg=>{
+        const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Dom/Festivo";
+        const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
+        const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+        return `<tr>
+          <td>${reg.fecha}</td><td>${tipoLabel}</td>
+          <td style="text-align:center">${reg.detalle.length}</td>
+          <td style="text-align:center">${totalHrs}h</td>
+          <td style="text-align:right;font-weight:600">$${totalVal.toLocaleString("es-CO")}</td>
+          <td><span class="badge b-ok">Aprobado</span></td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table>
+  </div>` : "";
+
+  const empty = pendientes.length===0&&aprobadas.length===0&&!esSSTouDir
+    ? `<div class="empty">⏱️<br>No hay registros de horas extras aún.</div>` : "";
+
+  setTimeout(()=>heRenderLista(), 50);
+  return formRegistro + (pendientes.length===0&&!esAprobador&&!esFinanzas?"":pendCard) + historial + empty;
+}
+
+function heRenderLista(){
+  const cont=document.getElementById("he-lista-trab");
+  if(!cont) return;
+  const activos=getPersonal().filter(p=>p.activo);
+  const horaIni=document.getElementById("he-hora-inicio")?.value||"16:30";
+  const horaFin=document.getElementById("he-hora-fin")?.value||"";
+  cont.innerHTML=activos.map(p=>{
+    const est=heEstado.trabajadores[p.id]||{incluido:true, horaInicio:horaIni, horaFin};
+    const hIni=est.horaInicio||horaIni;
+    const hFin=est.horaFin||horaFin;
+    let preview="";
+    if(hIni&&hFin){
+      const tipo=document.getElementById("he-tipo")?.value||"semana";
+      const r=calcularRecargo(tipo,horaADecimal(hIni),horaADecimal(hFin));
+      if(r.horas>0){
+        const val=calcularValorHE(p.salario,r.horas,r.pct);
+        preview=`<span style="font-size:10px;color:var(--green);margin-left:8px">${r.horas}h · $${val.toLocaleString("es-CO")}</span>`;
+      }
+    }
+    return `
+    <div style="background:#fff;border:1px solid var(--gray3);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${est.incluido?'':'opacity:.45'}">
+      <input type="checkbox" ${est.incluido?"checked":""} style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"
+        onchange="heToggleTrab(${p.id},this.checked)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${p.nombre}${preview}</div>
+        <div style="font-size:11px;color:var(--text3)">${p.cargo}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="time" value="${hIni}" style="font-size:11px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
+          onchange="heCambiarHoraInd(${p.id},'inicio',this.value)" ${est.incluido?"":"disabled"}>
+        <span style="font-size:11px;color:var(--text3)">→</span>
+        <input type="time" value="${hFin}" style="font-size:11px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
+          onchange="heCambiarHoraInd(${p.id},'fin',this.value)" ${est.incluido?"":"disabled"}>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function heActualizarFecha(v){ heEstado.fecha=v; }
+function heActualizarTipo(v){
+  heEstado.tipo=v;
+  // Ajustar hora de inicio por defecto según tipo
+  const inputIni=document.getElementById("he-hora-inicio");
+  if(inputIni){
+    if(v==="semana") inputIni.value="16:30";
+    else inputIni.value="07:30";
+  }
+  heRenderLista();
+}
+function heActualizarHoraGlobal(campo,v){
+  if(campo==="inicio") heEstado.horaInicio=v;
+  else heEstado.horaFin=v;
+  // Actualizar todos los que no tienen hora individual
+  getPersonal().filter(p=>p.activo).forEach(p=>{
+    if(!heEstado.trabajadores[p.id]) heEstado.trabajadores[p.id]={incluido:true,horaInicio:"",horaFin:""};
+    if(campo==="inicio") heEstado.trabajadores[p.id].horaInicio=v;
+    else heEstado.trabajadores[p.id].horaFin=v;
+  });
+  heRenderLista();
+}
+function heToggleTrab(id,val){
+  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:val,horaInicio:heEstado.horaInicio,horaFin:heEstado.horaFin};
+  heEstado.trabajadores[id].incluido=val;
+  heRenderLista();
+}
+function heCambiarHoraInd(id,campo,v){
+  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:true,horaInicio:heEstado.horaInicio,horaFin:heEstado.horaFin};
+  if(campo==="inicio") heEstado.trabajadores[id].horaInicio=v;
+  else heEstado.trabajadores[id].horaFin=v;
+  heRenderLista();
+}
+
+function heEnviar(){
+  if(!heEstado.fecha){alert("Seleccione la fecha.");return;}
+  const tipo=document.getElementById("he-tipo")?.value||"semana";
+  const activos=getPersonal().filter(p=>p.activo);
+  const detalle=[];
+  for(const p of activos){
+    const est=heEstado.trabajadores[p.id];
+    if(!est||!est.incluido) continue;
+    if(!est.horaInicio||!est.horaFin){alert(`Falta hora de inicio o fin para ${p.nombre}`);return;}
+    const r=calcularRecargo(tipo,horaADecimal(est.horaInicio),horaADecimal(est.horaFin));
+    if(r.horas<=0){alert(`Las horas de ${p.nombre} no generan tiempo extra válido.`);return;}
+    const valor=calcularValorHE(p.salario,r.horas,r.pct);
+    detalle.push({
+      id:p.id, nombre:p.nombre, cargo:p.cargo, salario:p.salario,
+      horaInicio:est.horaInicio, horaFin:est.horaFin,
+      horas:r.horas, tipo_recargo:r.tipo_recargo, pct:r.pct, valor
+    });
+  }
+  if(detalle.length===0){alert("No hay trabajadores con horas extras para registrar.");return;}
+  const todos=getHorasExtras();
+  todos.push({
+    id:Date.now(), fecha:heEstado.fecha, tipo,
+    detalle, registradoPor:rolActual.nombre+" (SST)",
+    aprobadoObra:false, aprobadoProy:false, estado:"pendiente"
+  });
+  setHorasExtras(todos);
+  // Resetear estado
+  heEstado={fecha:"",tipo:"semana",horaInicio:"",horaFin:"",trabajadores:{}};
+  const totalVal=detalle.reduce((s,d)=>s+d.valor,0);
+  mostrarOk("¡Horas extras enviadas!",
+    "Raúl Echeverri y Andrés Chaves deben aprobar el registro.",
+    `<div class="ok-row"><span class="l">Fecha</span><span>${todos[todos.length-1].fecha}</span></div>
+     <div class="ok-row"><span class="l">Trabajadores</span><span>${detalle.length}</span></div>
+     <div class="ok-row"><span class="l">Valor estimado</span><span>$${totalVal.toLocaleString("es-CO")}</span></div>`);
+}
+
+function heAprobarObra(id){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  reg.aprobadoObra=true;
+  if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+function heAprobarProy(id){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  reg.aprobadoProy=true;
+  if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+function heRechazar(id){
+  if(!confirm("¿Rechazar este registro de horas extras?")) return;
+  setHorasExtras(getHorasExtras().filter(h=>h.id!==id));
+  irTab("horas_extras");
 }
 
 function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
