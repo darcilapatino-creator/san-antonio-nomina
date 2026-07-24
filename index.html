@@ -1139,17 +1139,25 @@ function heActualizarTipo(v){
 function heActualizarHoraGlobal(campo,v){
   if(campo==="inicio") heEstado.horaInicio=v;
   else heEstado.horaFin=v;
-  // Actualizar todos los que no tienen hora individual
+  // Propagar a todos los trabajadores que no tienen hora individual personalizada
   getPersonal().filter(p=>p.activo).forEach(p=>{
-    if(!heEstado.trabajadores[p.id]) heEstado.trabajadores[p.id]={incluido:true,horaInicio:"",horaFin:""};
+    if(!heEstado.trabajadores[p.id]) heEstado.trabajadores[p.id]={incluido:false,horaInicio:"",horaFin:""};
     if(campo==="inicio") heEstado.trabajadores[p.id].horaInicio=v;
     else heEstado.trabajadores[p.id].horaFin=v;
   });
   heRenderLista();
 }
 function heToggleTrab(id,val){
-  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:val,horaInicio:heEstado.horaInicio,horaFin:heEstado.horaFin};
+  // Leer horas globales directamente del DOM para no depender del estado
+  const horaIni = document.getElementById("he-hora-inicio")?.value || heEstado.horaInicio || "";
+  const horaFin = document.getElementById("he-hora-fin")?.value || heEstado.horaFin || "";
+  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:val, horaInicio:horaIni, horaFin};
   heEstado.trabajadores[id].incluido=val;
+  // Si se está marcando, asegurar que tenga las horas globales
+  if(val){
+    if(!heEstado.trabajadores[id].horaInicio) heEstado.trabajadores[id].horaInicio=horaIni;
+    if(!heEstado.trabajadores[id].horaFin)    heEstado.trabajadores[id].horaFin=horaFin;
+  }
   heRenderLista();
 }
 function heCambiarHoraInd(id,campo,v){
