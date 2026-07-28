@@ -1089,6 +1089,90 @@ let heEstado = {
   trabajadores:{} // id → {incluido, horaInicio, horaFin}
 };
 
+function heRenderCard(reg){
+  const rechObra=reg.rechazadoObra;
+  const rechProy=reg.rechazadoProy;
+
+  const clsObra=reg.aprobadoObra?'chip-ok':rechObra?'chip-rech':'chip-pend';
+  const txtObra=reg.aprobadoObra?"✅ Raúl Echeverri":rechObra?"✖ Raúl rechazó":"⏳ Raúl Echeverri";
+  const clsProy=reg.aprobadoProy?'chip-ok':rechProy?'chip-rech':'chip-pend';
+  const txtProy=reg.aprobadoProy?"✅ Andrés Chaves":rechProy?"✖ Andrés rechazó":"⏳ Andrés Chaves";
+  const chipObra='<div class="chip '+clsObra+'">'+txtObra+'</div>';
+  const chipProy='<div class="chip '+clsProy+'">'+txtProy+'</div>';
+
+  let btnObra="";
+  if(rolActual.rol==="Director de Obra"){
+    if(reg.aprobadoObra) btnObra='<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>';
+    else if(rechObra) btnObra='<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra('+reg.id+')">↩️ Cambiar a aprobado</button>';
+    else btnObra='<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra('+reg.id+')">👷 Aprobar — Raúl Echeverri</button>'+
+      '<button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarObra('+reg.id+')">✖ Rechazar con motivo</button>';
+  } else {
+    const cls2=reg.aprobadoObra?' aprobado':'';
+    const lbl2=reg.aprobadoObra?"✅ Raúl aprobó":rechObra?"✖ Raúl rechazó":"⏳ Dir. Obra";
+    btnObra='<button class="btn-aprov btn-aprov-obra'+cls2+'" disabled>'+lbl2+'</button>';
+  }
+
+  let btnProy="";
+  if(rolActual.rol==="Director de Proyecto"){
+    if(reg.aprobadoProy) btnProy='<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>';
+    else if(rechProy) btnProy='<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy('+reg.id+')">↩️ Cambiar a aprobado</button>';
+    else btnProy='<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy('+reg.id+')">💼 Aprobar — Andrés Chaves</button>'+
+      '<button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarProy('+reg.id+')">✖ Rechazar con motivo</button>';
+  } else {
+    const cls3=reg.aprobadoProy?' aprobado':'';
+    const lbl3=reg.aprobadoProy?"✅ Andrés aprobó":rechProy?"✖ Andrés rechazó":"⏳ Dir. Proyecto";
+    btnProy='<button class="btn-aprov btn-aprov-proy'+cls3+'" disabled>'+lbl3+'</button>';
+  }
+
+  let alertaRechazo="";
+  if((rechObra||rechProy)&&rolActual.rol==="SST"){
+    alertaRechazo='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Registro con observaciones — corrija y reenvíe</div>'+
+      (rechObra?'<div style="font-size:11px;color:#7f1d1d;margin-bottom:4px"><strong>Raúl Echeverri:</strong> "'+reg.motivoRechazoObra+'"</div>':"")+ 
+      (rechProy?'<div style="font-size:11px;color:#7f1d1d"><strong>Andrés Chaves:</strong> "'+reg.motivoRechazoProy+'"</div>':"")+ 
+      '</div>';
+  }
+
+  const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Domingo/Festivo";
+  const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
+  const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+  const badgeColor=reg.estado==="rechazado_parcial"?"b-aus":"b-warn";
+  const badgeLabel=reg.estado==="rechazado_parcial"?"CON OBSERVACIONES":"PENDIENTE";
+
+  const filasDet=reg.detalle.map(d=>
+    '<tr style="border-top:1px solid #e2e8f0">'+
+    '<td style="padding:4px 8px">'+d.nombre+'</td>'+
+    '<td style="text-align:center">'+d.horaInicio+'</td>'+
+    '<td style="text-align:center">'+d.horaFin+'</td>'+
+    '<td style="text-align:center">'+d.horas+'h</td>'+
+    '<td style="text-align:center;font-size:10px">'+d.tipo_recargo+'</td>'+
+    '<td style="text-align:right;font-weight:600">$'+d.valor.toLocaleString("es-CO")+'</td></tr>'
+  ).join("");
+
+  const btnSST=rolActual.rol==="SST"?
+    '<button class="btn-aprov" style="background:var(--lblue);color:var(--blue);border:1.5px solid #93c5fd;margin-top:6px" onclick="heEditar('+reg.id+')">✏️ Editar y reenviar</button>'+
+    '<button class="btn-aprov btn-rechazar" onclick="heRechazar('+reg.id+')">✖ Eliminar registro</button>':"";
+
+  return '<div class="pend-card">'+
+    '<div class="pend-header"><span class="badge '+badgeColor+'">'+badgeLabel+'</span>'+
+    '<span class="pend-nombre">'+reg.fecha+' · '+tipoLabel+'</span></div>'+
+    '<div class="pend-body">'+alertaRechazo+
+    '<div class="pend-datos">'+
+    '<div class="pend-dato"><strong>'+reg.detalle.length+' trabajadores</strong>Con horas extras</div>'+
+    '<div class="pend-dato"><strong>'+totalHrs+' horas</strong>Total horas</div>'+
+    '<div class="pend-dato"><strong>$'+totalVal.toLocaleString("es-CO")+'</strong>Valor estimado</div>'+
+    '<div class="pend-dato"><strong>'+reg.registradoPor+'</strong>Registrado por</div></div>'+
+    '<div style="margin-bottom:10px"><table style="width:100%;font-size:11px;border-collapse:collapse">'+
+    '<thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Trabajador</th>'+
+    '<th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th></tr></thead>'+
+    '<tbody>'+filasDet+'</tbody></table></div>'+
+    '<div class="estado-chips">'+chipObra+chipProy+'</div>'+
+    '<div class="aprov-btns">'+
+    '<div style="display:flex;flex-direction:column;gap:4px">'+btnObra+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">'+btnProy+'</div>'+
+    btnSST+'</div></div></div>';
+}
+
 function renderHorasExtras(){
   const esSSTouDir=["SST","Director de Obra","Director de Proyecto"].includes(rolActual.rol);
   const esAprobador=["Director de Obra","Director de Proyecto"].includes(rolActual.rol);
@@ -1146,98 +1230,11 @@ function renderHorasExtras(){
     </div>
   </div>` : "";
 
-  const pendCard = pendientes.length>0 && (esAprobador||esSSTouDir) ? `
-  ${btnSemana}
-  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
-    ⏳ Pendientes de aprobación (${pendientes.length})
-  </div>
-  ${pendientes.concat(getHorasExtras().filter(h=>h.estado==="rechazado_parcial")).map(reg=>{
-    const rechObra=reg.rechazadoObra;
-    const rechProy=reg.rechazadoProy;
-    const chipObra=`<div class="chip ${reg.aprobadoObra?'chip-ok':rechObra?'chip-rech':'chip-pend'}">
-      ${reg.aprobadoObra?"✅ Raúl Echeverri":rechObra?"✖ Raúl rechazó":"⏳ Raúl Echeverri"}</div>`;
-    const chipProy=`<div class="chip ${reg.aprobadoProy?'chip-ok':rechProy?'chip-rech':'chip-pend'}">
-      ${reg.aprobadoProy?"✅ Andrés Chaves":rechProy?"✖ Andrés rechazó":"⏳ Andrés Chaves"}</div>`;
-
-    // Botones Director de Obra
-    let btnObra="";
-    if(rolActual.rol==="Director de Obra"){
-      if(reg.aprobadoObra) btnObra=`<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>`;
-      else if(rechObra) btnObra=`<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">↩️ Cambiar a aprobado</button>`;
-      else btnObra=`
-        <button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">👷 Aprobar — Raúl Echeverri</button>
-        <button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarObra(${reg.id})">✖ Rechazar con motivo</button>`;
-    } else {
-      btnObra=`<button class="btn-aprov btn-aprov-obra${reg.aprobadoObra?' aprobado':''}" disabled>${reg.aprobadoObra?"✅ Raúl aprobó":rechObra?"✖ Raúl rechazó":"⏳ Dir. Obra"}</button>`;
-    }
-
-    // Botones Director de Proyecto
-    let btnProy="";
-    if(rolActual.rol==="Director de Proyecto"){
-      if(reg.aprobadoProy) btnProy=`<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>`;
-      else if(rechProy) btnProy=`<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">↩️ Cambiar a aprobado</button>`;
-      else btnProy=`
-        <button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">💼 Aprobar — Andrés Chaves</button>
-        <button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarProy(${reg.id})">✖ Rechazar con motivo</button>`;
-    } else {
-      btnProy=`<button class="btn-aprov btn-aprov-proy${reg.aprobadoProy?' aprobado':''}" disabled>${reg.aprobadoProy?"✅ Andrés aprobó":rechProy?"✖ Andrés rechazó":"⏳ Dir. Proyecto"}</button>`;
-    }
-
-    // Alerta de rechazo visible para la SST
-    const alertaRechazo=(rechObra||rechProy)&&rolActual.rol==="SST"?`
-    <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Registro con observaciones — corrija y reenvíe</div>
-      ${rechObra?`<div style="font-size:11px;color:#7f1d1d;margin-bottom:4px"><strong>Raúl Echeverri:</strong> "${reg.motivoRechazoObra}"</div>`:""}
-      ${rechProy?`<div style="font-size:11px;color:#7f1d1d"><strong>Andrés Chaves:</strong> "${reg.motivoRechazoProy}"</div>`:""}
-    </div>`:"";
-
-    const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Domingo/Festivo";
-    const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
-    const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
-    const badgeColor=reg.estado==="rechazado_parcial"?"b-aus":"b-warn";
-    const badgeLabel=reg.estado==="rechazado_parcial"?"CON OBSERVACIONES":"PENDIENTE";
-    return `
-    <div class="pend-card">
-      <div class="pend-header">
-        <span class="badge ${badgeColor}">${badgeLabel}</span>
-        <span class="pend-nombre">${reg.fecha} · ${tipoLabel}</span>
-      </div>
-      <div class="pend-body">
-        ${alertaRechazo}
-        <div class="pend-datos">
-          <div class="pend-dato"><strong>${reg.detalle.length} trabajadores</strong>Con horas extras</div>
-          <div class="pend-dato"><strong>${totalHrs} horas</strong>Total horas</div>
-          <div class="pend-dato"><strong>$${totalVal.toLocaleString("es-CO")}</strong>Valor estimado</div>
-          <div class="pend-dato"><strong>${reg.registradoPor}</strong>Registrado por</div>
-        </div>
-        <div style="margin-bottom:10px">
-          <table style="width:100%;font-size:11px;border-collapse:collapse">
-            <thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Trabajador</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th></tr></thead>
-            <tbody>${reg.detalle.map(d=>`
-              <tr style="border-top:1px solid #e2e8f0">
-                <td style="padding:4px 8px">${d.nombre}</td>
-                <td style="text-align:center">${d.horaInicio}</td>
-                <td style="text-align:center">${d.horaFin}</td>
-                <td style="text-align:center">${d.horas}h</td>
-                <td style="text-align:center;font-size:10px">${d.tipo_recargo}</td>
-                <td style="text-align:right;font-weight:600">$${d.valor.toLocaleString("es-CO")}</td>
-              </tr>`).join("")}
-            </tbody>
-          </table>
-        </div>
-        <div class="estado-chips">${chipObra}${chipProy}</div>
-        <div class="aprov-btns">
-          <div style="display:flex;flex-direction:column;gap:4px">${btnObra}</div>
-          <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${btnProy}</div>
-          ${rolActual.rol==="SST"?`
-          <button class="btn-aprov" style="background:var(--lblue);color:var(--blue);border:1.5px solid #93c5fd;margin-top:6px" onclick="heEditar(${reg.id})">✏️ Editar y reenviar</button>
-          <button class="btn-aprov btn-rechazar" onclick="heRechazar(${reg.id})">✖ Eliminar registro</button>`:""}
-        </div>
-      </div>
-    </div>`;
-      </div>
-    </div>`;
-  }).join("")}` : "";
+  const pendCard = pendientes.length>0 && (esAprobador||esSSTouDir) ?
+    btnSemana +
+    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">⏳ Pendientes de aprobación ('+pendientes.length+')</div>' +
+    pendientes.concat(getHorasExtras().filter(h=>h.estado==="rechazado_parcial")).map(reg=>heRenderCard(reg)).join("")
+    : "";
 
   // Historial aprobadas
   const historial = aprobadas.length>0 ? `
@@ -1379,11 +1376,12 @@ function heEnviar(){
   // Resetear estado
   heEstado={fecha:"",tipo:"semana",horaInicio:"",horaFin:"",trabajadores:{}};
   const totalVal=detalle.reduce((s,d)=>s+d.valor,0);
+  const fechaReg=todos[todos.length-1].fecha;
   mostrarOk("¡Horas extras enviadas!",
     "Raúl Echeverri y Andrés Chaves deben aprobar el registro.",
-    `<div class="ok-row"><span class="l">Fecha</span><span>${todos[todos.length-1].fecha}</span></div>
-     <div class="ok-row"><span class="l">Trabajadores</span><span>${detalle.length}</span></div>
-     <div class="ok-row"><span class="l">Valor estimado</span><span>$${totalVal.toLocaleString("es-CO")}</span></div>`);
+    '<div class="ok-row"><span class="l">Fecha</span><span>'+fechaReg+'</span></div>'+
+    '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>'+
+    '<div class="ok-row"><span class="l">Valor estimado</span><span>$'+totalVal.toLocaleString("es-CO")+'</span></div>');
 }
 
 // Aprobación individual
@@ -1562,8 +1560,10 @@ function renderNomina(){
     return p2+(totalDev-ded);
   },0);
 
+  const alertaSinReg = sinRegistros ? '<div class="alert alert-warn">📌 Aún no hay registros de asistencia. La nómina se calculará automáticamente conforme la SST registre los días.</div>' : "";
+
   return `
-  ${sinRegistros?`<div class="alert alert-warn">📌 Aún no hay registros de asistencia. La nómina se calculará automáticamente conforme la SST registre los días.</div>`:""}
+  ${alertaSinReg}
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Días registrados</div><div class="stat-val azul">${hist.length}</div></div>
     <div class="stat-box"><div class="stat-label">HE aprobadas</div><div class="stat-val">${heAprobadas.length} reg.</div></div>
@@ -1636,7 +1636,7 @@ function exportarNominaExcel(){
     const dedPens=Math.round(salProp*0.04);
     const neto=totalDev-dedSalud-dedPens;
     rows.push([
-      `"${p.nombre}"`,`"${p.cargo}"`,d,aus,p.salario,salProp,auxProp,
+      '"'+p.nombre+'"','"'+p.cargo+'"',d,aus,p.salario,salProp,auxProp,
       he.horas.toFixed(1),he.valor,totalDev,dedSalud,dedPens,dedSalud+dedPens,neto
     ].join(sep));
   });
