@@ -113,6 +113,7 @@ select.field-input{cursor:pointer}
 .chip{flex:1;min-width:140px;padding:8px;border-radius:var(--radius-sm);text-align:center;font-size:11px;font-weight:600}
 .chip-pend{background:var(--yellow);color:#856404}
 .chip-ok{background:var(--lgreen);color:var(--green)}
+.chip-rech{background:var(--lred);color:var(--red)}
 .aprov-btns{display:flex;flex-direction:column;gap:6px}
 .btn-aprov{width:100%;padding:10px;border-radius:var(--radius-sm);border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px}
 .btn-aprov-obra{background:var(--lgreen);color:var(--green);border:1.5px solid #a7d99a}
@@ -264,8 +265,8 @@ const ROLES = {
   "5647": { nombre:"Yenny P. Vargas", rol:"SST",                  tabs:["asistencia","horas_extras","vinculacion"] },
   "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",     tabs:["horas_extras","vinculacion","asistencia_ro"] },
   "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["horas_extras","vinculacion","asistencia_ro","resumen"] },
-  "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","horas_extras","seguridad"] },
-  "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",          tabs:["resumen","horas_extras","seguridad"] },
+  "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","nomina","horas_extras","seguridad"] },
+  "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",          tabs:["resumen","nomina","horas_extras","seguridad"] },
   "7284": { nombre:"Residente",       rol:"Residente de Obra",     tabs:["asistencia_ro"] },
 };
 
@@ -274,8 +275,9 @@ const TAB_LABELS = {
   asistencia_ro: { icon:"📋", label:"Asistencia" },
   vinculacion:   { icon:"👤", label:"Vinculación" },
   horas_extras:  { icon:"⏱️", label:"Horas Extras" },
-  resumen:       { icon:"📊", label:"Resumen Nómina" },
-  seguridad:     { icon:"🏥", label:"Seguridad Social" },
+  resumen:       { icon:"📊", label:"Resumen" },
+  nomina:        { icon:"💰", label:"Nómina" },
+  seguridad:     { icon:"🏥", label:"Seg. Social" },
 };
 
 const PERSONAL = [
@@ -314,16 +316,22 @@ const NOVEDADES_TIPOS = [
   {id:"fin_obra",      icon:"🏗️", label:"Fin de la obra / labor",        retiro:true},
 ];
 
-const LS_RETIROS = "nom_retiros";
-
+const LS_RETIROS    = "nom_retiros";
 const LS_PERSONAL   = "nom_personal";
 const LS_PENDIENTES = "nom_pendientes";
 const LS_URL        = "nom_script_url";
+const LS_ASISTENCIA = "nom_asistencia_hist"; // historial de asistencia
 
 let rolActual  = null;
 let tabActual  = null;
 let pinBuffer  = "";
 let estadoAsis = {};
+
+// ══════════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════════
+function getAsistenciaHist(){ const s=localStorage.getItem(LS_ASISTENCIA); return s?JSON.parse(s):[]; }
+function setAsistenciaHist(h){ localStorage.setItem(LS_ASISTENCIA,JSON.stringify(h)); }
 
 // ══════════════════════════════════════════════════
 // STORAGE
@@ -409,6 +417,7 @@ function irTab(id){
   else if(id==="vinculacion")   c.innerHTML=renderVinculacion();
   else if(id==="horas_extras")  c.innerHTML=renderHorasExtras();
   else if(id==="resumen")       c.innerHTML=renderResumen();
+  else if(id==="nomina")        c.innerHTML=renderNomina();
   else if(id==="seguridad")     c.innerHTML=renderSeguridad();
 }
 
@@ -473,7 +482,8 @@ function renderAsistencia(){
   </button>
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Personal activo en obra</div>
   <div id="listaTrab">${tarjetas}</div>
-  <button class="btn btn-primary btn-block mt8" onclick="enviarAsistencia()">📤 Registrar asistencia del día</button>`;
+  <button class="btn btn-primary btn-block mt8" onclick="enviarAsistencia()">📤 Registrar asistencia del día</button>
+  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="document.getElementById('mainContent').innerHTML=renderCorreccionAsis()">✏️ Corregir registro anterior</button>`;
 }
 
 function toggleAsis(id){
@@ -568,12 +578,135 @@ async function enviarAsistencia(){
     setPersonal(personal);
     setRetiros(histRetiros);
   }
+  // Guardar en historial de asistencia
+  const hist=getAsistenciaHist();
+  // Remover si ya existe registro del mismo día (para permitir corrección)
+  const idx=hist.findIndex(h=>h.fecha===fecha);
+  const registro={
+    fecha, filas,
+    registradoPor: rolActual.nombre+" (SST)",
+    registradoEn: new Date().toLocaleString("es-CO"),
+    correcciones:[]
+  };
+  if(idx>=0) hist[idx]=registro;
+  else hist.push(registro);
+  setAsistenciaHist(hist);
+
   mostrarOk("¡Asistencia registrada!","Los datos fueron enviados a Google Sheets.",
     `<div class="ok-row"><span class="l">Fecha</span><span>${fecha}</span></div>
      <div class="ok-row"><span class="l">Presentes</span><span>${pres} personas</span></div>
      <div class="ok-row"><span class="l">Ausentes</span><span>${aus} personas</span></div>
      <div class="ok-row"><span class="l">Registrado por</span><span>SST</span></div>`);
   activos.forEach(p=>{ estadoAsis[p.id]={presente:null,novedad:null,obs:""}; });
+}
+
+// ══════════════════════════════════════════════════
+// CORRECCIÓN DE ASISTENCIA
+// ══════════════════════════════════════════════════
+function renderCorreccionAsis(){
+  const hist=getAsistenciaHist();
+  if(hist.length===0) return `<div class="empty">📋 No hay registros de asistencia aún.</div>`;
+
+  return `
+  <div class="card">
+    <div class="card-title">✏️ Historial y corrección de asistencia</div>
+    <div class="alert alert-warn">Seleccione un día para ver o corregir el registro. Toda corrección queda con log de quién la hizo y cuándo.</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Presentes</th><th>Ausentes</th><th>Registrado por</th><th>Correcciones</th><th></th></tr></thead>
+        <tbody>${hist.slice().reverse().map(r=>`
+          <tr>
+            <td><strong>${r.fecha}</strong></td>
+            <td style="text-align:center;color:var(--green)">${r.filas.filter(f=>f.estado==="Presente").length}</td>
+            <td style="text-align:center;color:var(--red)">${r.filas.filter(f=>f.estado==="Ausente").length}</td>
+            <td class="muted" style="font-size:11px">${r.registradoPor}<br>${r.registradoEn}</td>
+            <td style="text-align:center">${r.correcciones?.length||0}</td>
+            <td><button class="btn btn-sm" onclick="abrirCorreccion('${r.fecha}')">✏️ Editar</button></td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function abrirCorreccion(fecha){
+  const hist=getAsistenciaHist();
+  const reg=hist.find(h=>h.fecha===fecha);
+  if(!reg){alert("Registro no encontrado.");return;}
+
+  const filas=reg.filas.map(f=>{
+    const novOpts=NOVEDADES_TIPOS.filter(n=>!n.retiro).map(n=>
+      `<option value="${n.label}" ${f.novedad===n.label?"selected":""}>${n.label}</option>`).join("");
+    return `
+    <tr id="fila-cor-${f.nombre.replace(/\s/g,'_')}">
+      <td style="font-size:12px"><strong>${f.nombre}</strong><br><span class="muted">${f.cargo}</span></td>
+      <td>
+        <select style="font-size:12px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
+          onchange="corEstado('${f.nombre.replace(/'/g,"\\'")}',this.value)">
+          <option value="Presente" ${f.estado==="Presente"?"selected":""}>✅ Presente</option>
+          <option value="Ausente"  ${f.estado==="Ausente" ?"selected":""}>❌ Ausente</option>
+        </select>
+      </td>
+      <td>
+        <select style="font-size:12px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
+          onchange="corNovedad('${f.nombre.replace(/'/g,"\\'")}',this.value)">
+          <option value="">— Sin novedad —</option>${novOpts}
+        </select>
+      </td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("mainContent").innerHTML=`
+  <div class="card">
+    <div class="card-title">✏️ Corrección asistencia — ${fecha}</div>
+    <div class="alert alert-warn">⚠️ Está editando un registro existente. La corrección quedará registrada con su nombre y la fecha/hora actual.</div>
+    <div class="table-wrap" style="margin-bottom:12px">
+      <table id="tabla-correccion">
+        <thead><tr><th>Trabajador</th><th>Estado</th><th>Novedad</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Motivo de la corrección</label>
+      <input class="field-input" id="cor-motivo" placeholder="Ej: Error en marcación de Jesús Rodríguez">
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="guardarCorreccion('${fecha}')">💾 Guardar corrección</button>
+      <button class="btn" onclick="irTab('asistencia')">Cancelar</button>
+    </div>
+  </div>`;
+
+  // Guardar estado temporal de corrección
+  window._corBuffer = JSON.parse(JSON.stringify(reg.filas));
+}
+
+function corEstado(nombre,val){
+  const f=window._corBuffer.find(x=>x.nombre===nombre);
+  if(f){ f.estado=val; if(val==="Presente") f.novedad=""; }
+}
+function corNovedad(nombre,val){
+  const f=window._corBuffer.find(x=>x.nombre===nombre);
+  if(f) f.novedad=val;
+}
+
+function guardarCorreccion(fecha){
+  const motivo=document.getElementById("cor-motivo")?.value?.trim();
+  if(!motivo){alert("Indique el motivo de la corrección.");return;}
+  const hist=getAsistenciaHist();
+  const idx=hist.findIndex(h=>h.fecha===fecha);
+  if(idx<0){alert("Registro no encontrado.");return;}
+  if(!hist[idx].correcciones) hist[idx].correcciones=[];
+  hist[idx].correcciones.push({
+    por:rolActual.nombre+" ("+rolActual.rol+")",
+    en:new Date().toLocaleString("es-CO"),
+    motivo,
+    antes:hist[idx].filas
+  });
+  hist[idx].filas=JSON.parse(JSON.stringify(window._corBuffer));
+  setAsistenciaHist(hist);
+  mostrarOk("✅ Corrección guardada",`El registro del ${fecha} fue actualizado.`,
+    `<div class="ok-row"><span class="l">Motivo</span><span>${motivo}</span></div>
+     <div class="ok-row"><span class="l">Corregido por</span><span>${rolActual.nombre}</span></div>`);
 }
 
 // ══════════════════════════════════════════════════
@@ -1003,29 +1136,74 @@ function renderHorasExtras(){
   </div>` : "";
 
   // Pendientes de aprobación
+  const btnSemana = esAprobador && pendientes.length>0 ? `
+  <div class="card" style="border:1.5px solid var(--amber);background:var(--yellow)">
+    <div class="card-title" style="color:#856404">📅 Aprobación semanal — ${pendientes.length} registro(s) pendiente(s)</div>
+    <p style="font-size:12px;color:#92400e;margin-bottom:12px">Apruebe todos los registros de la semana de una sola vez. Recomendado los <strong>lunes</strong>.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${rolActual.rol==="Director de Obra"?`<button class="btn btn-success" onclick="heAprobarSemanaObra()">👷 Aprobar semana completa — Raúl Echeverri</button>`:""}
+      ${rolActual.rol==="Director de Proyecto"?`<button class="btn btn-primary" onclick="heAprobarSemanaProy()">💼 Aprobar semana completa — Andrés Chaves</button>`:""}
+    </div>
+  </div>` : "";
+
   const pendCard = pendientes.length>0 && (esAprobador||esSSTouDir) ? `
+  ${btnSemana}
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
     ⏳ Pendientes de aprobación (${pendientes.length})
   </div>
-  ${pendientes.map(reg=>{
-    const chipObra=`<div class="chip ${reg.aprobadoObra?'chip-ok':'chip-pend'}">${reg.aprobadoObra?"✅ Raúl Echeverri":"⏳ Raúl Echeverri"}</div>`;
-    const chipProy=`<div class="chip ${reg.aprobadoProy?'chip-ok':'chip-pend'}">${reg.aprobadoProy?"✅ Andrés Chaves":"⏳ Andrés Chaves"}</div>`;
-    const btnObra = esAprobador && rolActual.rol==="Director de Obra" && !reg.aprobadoObra
-      ? `<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">👷 Aprobar — Raúl Echeverri</button>`
-      : `<button class="btn-aprov btn-aprov-obra${reg.aprobadoObra?' aprobado':''}" disabled>${reg.aprobadoObra?"✅ Raúl aprobó":"⏳ Dir. Obra"}</button>`;
-    const btnProy = rolActual.rol==="Director de Proyecto" && !reg.aprobadoProy
-      ? `<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">💼 Aprobar — Andrés Chaves</button>`
-      : `<button class="btn-aprov btn-aprov-proy${reg.aprobadoProy?' aprobado':''}" disabled>${reg.aprobadoProy?"✅ Andrés aprobó":"⏳ Dir. Proyecto"}</button>`;
+  ${pendientes.concat(getHorasExtras().filter(h=>h.estado==="rechazado_parcial")).map(reg=>{
+    const rechObra=reg.rechazadoObra;
+    const rechProy=reg.rechazadoProy;
+    const chipObra=`<div class="chip ${reg.aprobadoObra?'chip-ok':rechObra?'chip-rech':'chip-pend'}">
+      ${reg.aprobadoObra?"✅ Raúl Echeverri":rechObra?"✖ Raúl rechazó":"⏳ Raúl Echeverri"}</div>`;
+    const chipProy=`<div class="chip ${reg.aprobadoProy?'chip-ok':rechProy?'chip-rech':'chip-pend'}">
+      ${reg.aprobadoProy?"✅ Andrés Chaves":rechProy?"✖ Andrés rechazó":"⏳ Andrés Chaves"}</div>`;
+
+    // Botones Director de Obra
+    let btnObra="";
+    if(rolActual.rol==="Director de Obra"){
+      if(reg.aprobadoObra) btnObra=`<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>`;
+      else if(rechObra) btnObra=`<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">↩️ Cambiar a aprobado</button>`;
+      else btnObra=`
+        <button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra(${reg.id})">👷 Aprobar — Raúl Echeverri</button>
+        <button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarObra(${reg.id})">✖ Rechazar con motivo</button>`;
+    } else {
+      btnObra=`<button class="btn-aprov btn-aprov-obra${reg.aprobadoObra?' aprobado':''}" disabled>${reg.aprobadoObra?"✅ Raúl aprobó":rechObra?"✖ Raúl rechazó":"⏳ Dir. Obra"}</button>`;
+    }
+
+    // Botones Director de Proyecto
+    let btnProy="";
+    if(rolActual.rol==="Director de Proyecto"){
+      if(reg.aprobadoProy) btnProy=`<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>`;
+      else if(rechProy) btnProy=`<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">↩️ Cambiar a aprobado</button>`;
+      else btnProy=`
+        <button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy(${reg.id})">💼 Aprobar — Andrés Chaves</button>
+        <button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarProy(${reg.id})">✖ Rechazar con motivo</button>`;
+    } else {
+      btnProy=`<button class="btn-aprov btn-aprov-proy${reg.aprobadoProy?' aprobado':''}" disabled>${reg.aprobadoProy?"✅ Andrés aprobó":rechProy?"✖ Andrés rechazó":"⏳ Dir. Proyecto"}</button>`;
+    }
+
+    // Alerta de rechazo visible para la SST
+    const alertaRechazo=(rechObra||rechProy)&&rolActual.rol==="SST"?`
+    <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Registro con observaciones — corrija y reenvíe</div>
+      ${rechObra?`<div style="font-size:11px;color:#7f1d1d;margin-bottom:4px"><strong>Raúl Echeverri:</strong> "${reg.motivoRechazoObra}"</div>`:""}
+      ${rechProy?`<div style="font-size:11px;color:#7f1d1d"><strong>Andrés Chaves:</strong> "${reg.motivoRechazoProy}"</div>`:""}
+    </div>`:"";
+
     const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Domingo/Festivo";
     const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
     const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+    const badgeColor=reg.estado==="rechazado_parcial"?"b-aus":"b-warn";
+    const badgeLabel=reg.estado==="rechazado_parcial"?"CON OBSERVACIONES":"PENDIENTE";
     return `
     <div class="pend-card">
       <div class="pend-header">
-        <span class="badge b-warn">PENDIENTE</span>
+        <span class="badge ${badgeColor}">${badgeLabel}</span>
         <span class="pend-nombre">${reg.fecha} · ${tipoLabel}</span>
       </div>
       <div class="pend-body">
+        ${alertaRechazo}
         <div class="pend-datos">
           <div class="pend-dato"><strong>${reg.detalle.length} trabajadores</strong>Con horas extras</div>
           <div class="pend-dato"><strong>${totalHrs} horas</strong>Total horas</div>
@@ -1049,9 +1227,14 @@ function renderHorasExtras(){
         </div>
         <div class="estado-chips">${chipObra}${chipProy}</div>
         <div class="aprov-btns">
-          <div class="aprobacion-fila">${btnObra}${btnProy}</div>
-          ${esSSTouDir?`<button class="btn-aprov btn-rechazar" onclick="heRechazar(${reg.id})">✖ Rechazar registro</button>`:""}
+          <div style="display:flex;flex-direction:column;gap:4px">${btnObra}</div>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${btnProy}</div>
+          ${rolActual.rol==="SST"?`
+          <button class="btn-aprov" style="background:var(--lblue);color:var(--blue);border:1.5px solid #93c5fd;margin-top:6px" onclick="heEditar(${reg.id})">✏️ Editar y reenviar</button>
+          <button class="btn-aprov btn-rechazar" onclick="heRechazar(${reg.id})">✖ Eliminar registro</button>`:""}
         </div>
+      </div>
+    </div>`;
       </div>
     </div>`;
   }).join("")}` : "";
@@ -1203,11 +1386,14 @@ function heEnviar(){
      <div class="ok-row"><span class="l">Valor estimado</span><span>$${totalVal.toLocaleString("es-CO")}</span></div>`);
 }
 
+// Aprobación individual
 function heAprobarObra(id){
   const todos=getHorasExtras();
   const reg=todos.find(h=>h.id===id);
   if(!reg) return;
   reg.aprobadoObra=true;
+  reg.rechazadoObra=false;
+  reg.motivoRechazoObra="";
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
   irTab("horas_extras");
@@ -1217,14 +1403,250 @@ function heAprobarProy(id){
   const reg=todos.find(h=>h.id===id);
   if(!reg) return;
   reg.aprobadoProy=true;
+  reg.rechazadoProy=false;
+  reg.motivoRechazoProy="";
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
   irTab("horas_extras");
 }
+
+// Rechazo con motivo
+function heRechazarObra(id){
+  const motivo=prompt("Motivo del rechazo (Raúl Echeverri):");
+  if(motivo===null) return;
+  if(!motivo.trim()){alert("Debe escribir un motivo.");return;}
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  reg.aprobadoObra=false;
+  reg.rechazadoObra=true;
+  reg.motivoRechazoObra=motivo.trim();
+  reg.estado="rechazado_parcial";
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+function heRechazarProy(id){
+  const motivo=prompt("Motivo del rechazo (Andrés Chaves):");
+  if(motivo===null) return;
+  if(!motivo.trim()){alert("Debe escribir un motivo.");return;}
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  reg.aprobadoProy=false;
+  reg.rechazadoProy=true;
+  reg.motivoRechazoProy=motivo.trim();
+  reg.estado="rechazado_parcial";
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+
+// Aprobación semanal — aprueba TODOS los pendientes de una vez
+function heAprobarSemanaObra(){
+  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Raúl Echeverri?")) return;
+  const todos=getHorasExtras();
+  todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial").forEach(h=>{
+    h.aprobadoObra=true;
+    h.rechazadoObra=false;
+    h.motivoRechazoObra="";
+    if(h.aprobadoObra&&h.aprobadoProy) h.estado="aprobado";
+    else h.estado="pendiente";
+  });
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+function heAprobarSemanaProy(){
+  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Andrés Chaves?")) return;
+  const todos=getHorasExtras();
+  todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial").forEach(h=>{
+    h.aprobadoProy=true;
+    h.rechazadoProy=false;
+    h.motivoRechazoProy="";
+    if(h.aprobadoObra&&h.aprobadoProy) h.estado="aprobado";
+    else h.estado="pendiente";
+  });
+  setHorasExtras(todos);
+  irTab("horas_extras");
+}
+
 function heRechazar(id){
-  if(!confirm("¿Rechazar este registro de horas extras?")) return;
+  if(!confirm("¿Eliminar completamente este registro?")) return;
   setHorasExtras(getHorasExtras().filter(h=>h.id!==id));
   irTab("horas_extras");
+}
+
+// Corrección HE — SST corrige un registro rechazado o pendiente
+function heEditar(id){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg){alert("Registro no encontrado.");return;}
+  if(reg.estado==="aprobado"){alert("No se puede editar un registro ya aprobado.");return;}
+  if(!confirm("¿Eliminar este registro para corregirlo y reenviarlo?")) return;
+  setHorasExtras(todos.filter(h=>h.id!==id));
+  heEstado.fecha=reg.fecha;
+  heEstado.tipo=reg.tipo;
+  reg.detalle.forEach(d=>{
+    heEstado.trabajadores[d.id]={incluido:true,horaInicio:d.horaInicio,horaFin:d.horaFin};
+  });
+  irTab("horas_extras");
+}
+
+// ══════════════════════════════════════════════════
+// NÓMINA — Liquidación integrada
+// ══════════════════════════════════════════════════
+function renderNomina(){
+  const personal=getPersonal().filter(p=>p.activo);
+  const hist=getAsistenciaHist();
+  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  const SMMLV=1423500, AUX_T=249095;
+
+  // Calcular días por trabajador desde historial
+  const diasMap={};
+  personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0,novedades:[]}; });
+  hist.forEach(reg=>{
+    reg.filas.forEach(f=>{
+      if(!diasMap[f.nombre]) return;
+      if(f.estado==="Presente") diasMap[f.nombre].presentes++;
+      else {
+        diasMap[f.nombre].ausentes++;
+        if(f.novedad) diasMap[f.nombre].novedades.push(f.novedad);
+      }
+    });
+  });
+
+  // Calcular HE por trabajador
+  const heMap={};
+  heAprobadas.forEach(reg=>{
+    reg.detalle.forEach(d=>{
+      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0};
+      heMap[d.nombre].horas+=d.horas;
+      heMap[d.nombre].valor+=d.valor;
+    });
+  });
+
+  const sinRegistros=hist.length===0;
+
+  const filas=personal.map((p,i)=>{
+    const dias=diasMap[p.nombre]||{presentes:0,ausentes:0};
+    const d=dias.presentes||0;
+    const aux=p.salario<=2*SMMLV?AUX_T:0;
+    const salProp=Math.round(p.salario*d/30);
+    const auxProp=Math.round(aux*d/30);
+    const he=heMap[p.nombre]||{horas:0,valor:0};
+    const totalDev=salProp+auxProp+he.valor;
+    const dedSalud=Math.round(salProp*0.04);
+    const dedPens=Math.round(salProp*0.04);
+    const neto=totalDev-dedSalud-dedPens;
+    const bg=i%2===0?"#f8fafc":"#fff";
+    return `<tr style="background:${bg}">
+      <td style="font-size:12px"><strong>${p.nombre}</strong><br><span class="muted">${p.cargo}</span></td>
+      <td style="text-align:center;color:var(--green);font-weight:600">${d}</td>
+      <td style="text-align:center;color:var(--red)">${dias.ausentes||0}</td>
+      <td style="text-align:right">$${salProp.toLocaleString("es-CO")}</td>
+      <td style="text-align:right">${auxProp>0?"$"+auxProp.toLocaleString("es-CO"):"—"}</td>
+      <td style="text-align:right;color:var(--blue)">${he.horas>0?he.horas.toFixed(1)+"h · $"+he.valor.toLocaleString("es-CO"):"—"}</td>
+      <td style="text-align:right;font-weight:700">$${totalDev.toLocaleString("es-CO")}</td>
+      <td style="text-align:right;color:var(--red)">-$${(dedSalud+dedPens).toLocaleString("es-CO")}</td>
+      <td style="text-align:right;font-weight:700;color:var(--green)">$${neto.toLocaleString("es-CO")}</td>
+    </tr>`;
+  }).join("");
+
+  const totPresentes=personal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0);
+  const totNeto=personal.reduce((p2,p)=>{
+    const d=diasMap[p.nombre]?.presentes||0;
+    const aux=p.salario<=2*SMMLV?AUX_T:0;
+    const salProp=Math.round(p.salario*d/30);
+    const auxProp=Math.round(aux*d/30);
+    const he=heMap[p.nombre]||{valor:0};
+    const totalDev=salProp+auxProp+he.valor;
+    const ded=Math.round(salProp*0.08);
+    return p2+(totalDev-ded);
+  },0);
+
+  return `
+  ${sinRegistros?`<div class="alert alert-warn">📌 Aún no hay registros de asistencia. La nómina se calculará automáticamente conforme la SST registre los días.</div>`:""}
+  <div class="stat-grid">
+    <div class="stat-box"><div class="stat-label">Días registrados</div><div class="stat-val azul">${hist.length}</div></div>
+    <div class="stat-box"><div class="stat-label">HE aprobadas</div><div class="stat-val">${heAprobadas.length} reg.</div></div>
+    <div class="stat-box"><div class="stat-label">Neto total estimado</div><div class="stat-val verde" style="font-size:16px">$${totNeto.toLocaleString("es-CO")}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">💰 Liquidación de nómina — datos acumulados</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Trabajador</th><th>Días trab.</th><th>Días aus.</th>
+          <th>Sal. prop.</th><th>Aux. transp.</th><th>Horas extras</th>
+          <th>Total devengado</th><th>Deducciones (8%)</th><th>Neto a pagar</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="exportarNominaExcel()">📥 Descargar Excel nómina</button>
+      <button class="btn" onclick="irTab('resumen')">📊 Ver resumen</button>
+    </div>
+  </div>
+  <div class="muted mt8" style="font-size:11px">
+    Salario proporcional = Salario base × días trabajados / 30 · Deducciones empleado: Salud 4% + Pensión 4% sobre salario proporcional · Aux. transporte 2026: $249.095 (aplica si salario ≤ 2 SMMLV)
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════
+// EXPORTAR EXCEL DE NÓMINA
+// ══════════════════════════════════════════════════
+function exportarNominaExcel(){
+  const personal=getPersonal().filter(p=>p.activo);
+  const hist=getAsistenciaHist();
+  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  const SMMLV=1423500, AUX_T=249095;
+
+  const diasMap={};
+  personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0}; });
+  hist.forEach(reg=>{
+    reg.filas.forEach(f=>{
+      if(!diasMap[f.nombre]) return;
+      if(f.estado==="Presente") diasMap[f.nombre].presentes++;
+      else diasMap[f.nombre].ausentes++;
+    });
+  });
+  const heMap={};
+  heAprobadas.forEach(reg=>{
+    reg.detalle.forEach(d=>{
+      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0};
+      heMap[d.nombre].horas+=d.horas;
+      heMap[d.nombre].valor+=d.valor;
+    });
+  });
+
+  // Generar CSV
+  const sep=",";
+  const cols=["Trabajador","Cargo","Días trab.","Días aus.","Salario base","Sal. proporcional",
+               "Aux. transporte","H. extras","Valor H. extras","Total devengado",
+               "Ded. salud (4%)","Ded. pensión (4%)","Total deducciones","Neto a pagar"];
+  const rows=[cols.join(sep)];
+  personal.forEach(p=>{
+    const d=diasMap[p.nombre]?.presentes||0;
+    const aus=diasMap[p.nombre]?.ausentes||0;
+    const aux=p.salario<=2*SMMLV?AUX_T:0;
+    const salProp=Math.round(p.salario*d/30);
+    const auxProp=Math.round(aux*d/30);
+    const he=heMap[p.nombre]||{horas:0,valor:0};
+    const totalDev=salProp+auxProp+he.valor;
+    const dedSalud=Math.round(salProp*0.04);
+    const dedPens=Math.round(salProp*0.04);
+    const neto=totalDev-dedSalud-dedPens;
+    rows.push([
+      `"${p.nombre}"`,`"${p.cargo}"`,d,aus,p.salario,salProp,auxProp,
+      he.horas.toFixed(1),he.valor,totalDev,dedSalud,dedPens,dedSalud+dedPens,neto
+    ].join(sep));
+  });
+
+  const blob=new Blob(["\uFEFF"+rows.join("\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`Nomina_SanAntonio_${getFechaISO().replace(/\//g,"-")}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
