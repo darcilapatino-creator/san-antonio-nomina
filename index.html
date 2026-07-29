@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nómina — San Antonio · CONSTRUCTHOR</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1595,13 +1596,22 @@ function renderNomina(){
 // EXPORTAR EXCEL DE NÓMINA
 // ══════════════════════════════════════════════════
 function exportarNominaExcel(){
-  const personal=getPersonal().filter(p=>p.activo);
-  const hist=getAsistenciaHist();
-  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
-  const SMMLV=1423500, AUX_T=249095;
+  if(typeof XLSX === "undefined"){
+    alert("La librería de Excel aún está cargando. Espere un momento e intente de nuevo.");
+    return;
+  }
 
-  const diasMap={};
-  personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0}; });
+  const todoPersonal = getPersonal(); // incluye retirados
+  const hist         = getAsistenciaHist();
+  const heAprobadas  = getHorasExtras().filter(h=>h.estado==="aprobado");
+  const SMMLV = 1423500, AUX_T = 249095;
+  const MES_NUM = new Date().getMonth()+1;
+  const ANIO_NUM = new Date().getFullYear();
+  const DIAS_MES = new Date(ANIO_NUM, MES_NUM, 0).getDate();
+
+  // ── Calcular días presentes por trabajador desde historial ──
+  const diasMap = {};
+  todoPersonal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0}; });
   hist.forEach(reg=>{
     reg.filas.forEach(f=>{
       if(!diasMap[f.nombre]) return;
@@ -1609,44 +1619,266 @@ function exportarNominaExcel(){
       else diasMap[f.nombre].ausentes++;
     });
   });
-  const heMap={};
+
+  // ── Calcular HE por trabajador y por día ──
+  const heMap  = {}; // nombre → {horas, valor, diurnas, dominicales, porDia:{}}
+  const heDias = {}; // nombre → {dia: horas}
+  todoPersonal.forEach(p=>{
+    heMap[p.nombre]  = {horas:0, valor:0, diurnas:0, dominicales:0};
+    heDias[p.nombre] = {};
+  });
   heAprobadas.forEach(reg=>{
+    const fecha = reg.fecha; // "DD/MM/YYYY"
+    const dia   = parseInt(fecha.split("/")[0]);
+    const dow   = new Date(parseInt(fecha.split("/")[2]), parseInt(fecha.split("/")[1])-1, dia).getDay();
     reg.detalle.forEach(d=>{
-      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0};
-      heMap[d.nombre].horas+=d.horas;
-      heMap[d.nombre].valor+=d.valor;
+      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0,diurnas:0,dominicales:0};
+      if(!heDias[d.nombre]) heDias[d.nombre]={};
+      heMap[d.nombre].horas += d.horas;
+      heMap[d.nombre].valor += d.valor;
+      if(dow===0) heMap[d.nombre].dominicales += d.horas;
+      else        heMap[d.nombre].diurnas     += d.horas;
+      heDias[d.nombre][dia] = (heDias[d.nombre][dia]||0) + d.horas;
     });
   });
 
-  // Generar CSV
-  const sep=",";
-  const cols=["Trabajador","Cargo","Días trab.","Días aus.","Salario base","Sal. proporcional",
-               "Aux. transporte","H. extras","Valor H. extras","Total devengado",
-               "Ded. salud (4%)","Ded. pensión (4%)","Total deducciones","Neto a pagar"];
-  const rows=[cols.join(sep)];
-  personal.forEach(p=>{
-    const d=diasMap[p.nombre]?.presentes||0;
-    const aus=diasMap[p.nombre]?.ausentes||0;
-    const aux=p.salario<=2*SMMLV?AUX_T:0;
-    const salProp=Math.round(p.salario*d/30);
-    const auxProp=Math.round(aux*d/30);
-    const he=heMap[p.nombre]||{horas:0,valor:0};
-    const totalDev=salProp+auxProp+he.valor;
-    const dedSalud=Math.round(salProp*0.04);
-    const dedPens=Math.round(salProp*0.04);
-    const neto=totalDev-dedSalud-dedPens;
-    rows.push([
-      '"'+p.nombre+'"','"'+p.cargo+'"',d,aus,p.salario,salProp,auxProp,
-      he.horas.toFixed(1),he.valor,totalDev,dedSalud,dedPens,dedSalud+dedPens,neto
-    ].join(sep));
+  const wb = XLSX.utils.book_new();
+
+  // ═══════════════════════════════════════════════════
+  // HOJA 1: NÓMINA PRINCIPAL
+  // ═══════════════════════════════════════════════════
+  const nomData = [];
+  // Encabezados
+  nomData.push(["CONSTRUCTHOR S.A.S.","","","","","NÓMINA CONTRATO OBRA LABOR","","","","","","HABITAD"]);
+  nomData.push(["NIT: 900808494-9","","","","","MES: "+obtenerMesNombre()+" "+ANIO_NUM,"","","","","","NIT: 901.449.531-6"]);
+  nomData.push(["PROYECTO SAN ANTONIO — Sogamoso, Boyacá","","","","","Período: 01/"+String(MES_NUM).padStart(2,"0")+"/"+ANIO_NUM+" al "+DIAS_MES+"/"+String(MES_NUM).padStart(2,"0")+"/"+ANIO_NUM,"","","","","","finanzas@habi-tad.com"]);
+  nomData.push(["DATOS DEL TRABAJADOR","","","","","DEVENGADO","","","","","","DEDUCCIONES","","NÓMINA DEDUCIBLE"]);
+  nomData.push(["NOMBRE EMPLEADO","CARGO","C.C.","INICIO LABORES","RETIRO","SALARIO BÁSICO","DÍAS LIQ.","SALARIO DEVENGADO","AUXILIO TRANSP.","BONIFICACIÓN","TOTAL DEVENGADO","SALUD (4%)","PENSIÓN (4%)","NÓMINA DEDUCIBLE"]);
+
+  todoPersonal.forEach(p=>{
+    const d      = diasMap[p.nombre]?.presentes || 0;
+    const sal    = p.salario;
+    const aux    = sal <= 2*SMMLV ? AUX_T : 0;
+    const salProp = Math.round(sal*d/30);
+    const auxProp = Math.round(aux*d/30);
+    const bonif   = 0; // celda manual
+    const totDev  = salProp + auxProp + bonif;
+    const salud   = Math.round(salProp*0.04);
+    const pension = Math.round(salProp*0.04);
+    const neto    = totDev - salud - pension;
+    nomData.push([
+      p.nombre, p.cargo, p.cedula||p.cc||"",
+      p.fechaIngreso||"", p.fechaRetiro||"",
+      sal, d, salProp, auxProp, bonif, totDev, salud, pension, neto
+    ]);
   });
 
-  const blob=new Blob(["\uFEFF"+rows.join("\n")],{type:"text/csv;charset=utf-8"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`Nomina_SanAntonio_${getFechaISO().replace(/\//g,"-")}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  // Totales
+  const fi = 6; // fila inicio datos (1-based en lógica)
+  const ff = fi + todoPersonal.length - 1;
+  nomData.push(["TOTALES","","","","",
+    todoPersonal.reduce((s,p)=>s+p.salario,0),
+    todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0),
+    ...["H","I","J","K","L","M","N"].map((_,i)=>
+      todoPersonal.reduce((s,p,pi)=>{
+        const d=diasMap[p.nombre]?.presentes||0, sal=p.salario;
+        const aux=sal<=2*SMMLV?AUX_T:0;
+        const salProp=Math.round(sal*d/30), auxProp=Math.round(aux*d/30);
+        const totDev=salProp+auxProp, salud=Math.round(salProp*0.04), pension=Math.round(salProp*0.04);
+        return s+[salProp,auxProp,0,totDev,salud,pension,totDev-salud-pension][i];
+      },0)
+    )
+  ]);
+
+  const wsNom = XLSX.utils.aoa_to_sheet(nomData);
+  // Estilos básicos de ancho de columna
+  wsNom["!cols"] = [
+    {wch:32},{wch:20},{wch:13},{wch:12},{wch:12},
+    {wch:13},{wch:7},{wch:14},{wch:14},{wch:13},{wch:14},{wch:11},{wch:11},{wch:14}
+  ];
+  wsNom["!merges"] = [
+    {s:{r:0,c:0},e:{r:0,c:4}},{s:{r:0,c:5},e:{r:0,c:10}},{s:{r:0,c:11},e:{r:0,c:13}},
+    {s:{r:1,c:0},e:{r:1,c:4}},{s:{r:1,c:5},e:{r:1,c:10}},{s:{r:1,c:11},e:{r:1,c:13}},
+    {s:{r:2,c:0},e:{r:2,c:4}},{s:{r:2,c:5},e:{r:2,c:10}},{s:{r:2,c:11},e:{r:2,c:13}},
+    {s:{r:3,c:0},e:{r:3,c:4}},{s:{r:3,c:5},e:{r:3,c:10}},{s:{r:3,c:11},e:{r:3,c:12}},
+  ];
+  aplicarFormatoNomina(wsNom, todoPersonal.length);
+  XLSX.utils.book_append_sheet(wb, wsNom, "Nómina");
+
+  // ═══════════════════════════════════════════════════
+  // HOJA 2: HORAS EXTRAS DÍA A DÍA
+  // ═══════════════════════════════════════════════════
+  const diasSemana = ["D","L","M","X","J","V","S"];
+  const heHeader1  = ["NOMBRE","CARGO"];
+  const heHeader2  = ["",""];
+  for(let d=1; d<=DIAS_MES; d++){
+    heHeader1.push(d);
+    const dow = new Date(ANIO_NUM, MES_NUM-1, d).getDay();
+    heHeader2.push(diasSemana[dow]);
+  }
+  heHeader1.push("TOTAL HRS","HRS DIURNAS","HRS DOMINICALES","VR H.E. DIURNA","VR H.E. DOMINICAL","TOTAL A PAGAR");
+  heHeader2.push("","","","","","");
+
+  const heData = [heHeader1, heHeader2];
+  todoPersonal.forEach(p=>{
+    const sal = p.salario;
+    const vrDiurna    = Math.round((sal/240)*1.25);
+    const vrDominical = Math.round((sal/240)*1.75);
+    const he   = heMap[p.nombre]||{horas:0,valor:0,diurnas:0,dominicales:0};
+    const dias_he = heDias[p.nombre]||{};
+    const fila = [p.nombre, p.cargo];
+    for(let d=1; d<=DIAS_MES; d++){
+      fila.push(dias_he[d]||0);
+    }
+    fila.push(
+      Math.round(he.horas*10)/10,
+      Math.round(he.diurnas*10)/10,
+      Math.round(he.dominicales*10)/10,
+      vrDiurna,
+      vrDominical,
+      Math.round(he.diurnas*vrDiurna + he.dominicales*vrDominical)
+    );
+    heData.push(fila);
+  });
+
+  // Totales HE
+  const totFila = ["TOTALES",""];
+  for(let d=1; d<=DIAS_MES; d++){
+    totFila.push(todoPersonal.reduce((s,p)=>(heDias[p.nombre]||{})[d]||0+s,0));
+  }
+  totFila.push(
+    Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.horas||0),0)*10)/10,
+    Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.diurnas||0),0)*10)/10,
+    Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.dominicales||0),0)*10)/10,
+    "—","—",
+    todoPersonal.reduce((s,p)=>{
+      const he=heMap[p.nombre]||{diurnas:0,dominicales:0};
+      const sal=p.salario;
+      return s+Math.round(he.diurnas*(sal/240)*1.25+he.dominicales*(sal/240)*1.75);
+    },0)
+  );
+  heData.push(totFila);
+
+  const wsHE = XLSX.utils.aoa_to_sheet(heData);
+  wsHE["!cols"] = [{wch:28},{wch:18},...Array(DIAS_MES).fill({wch:3.5}),
+    {wch:12},{wch:12},{wch:16},{wch:13},{wch:15},{wch:14}];
+  aplicarFormatoHE(wsHE, todoPersonal.length, DIAS_MES);
+  XLSX.utils.book_append_sheet(wb, wsHE, "Horas Extras");
+
+  // ═══════════════════════════════════════════════════
+  // HOJA 3: PARAFISCALES
+  // ═══════════════════════════════════════════════════
+  const pfData = [
+    ["APORTES PARAFISCALES EMPLEADOR — PROYECTO VIP SAN ANTONIO · "+obtenerMesNombre()+" "+ANIO_NUM],
+    ["CONSTRUCTHOR S.A.S. | Tasas: Salud 8.5% · Pensión 12% · ARL 6.96% · CCF 4%"],
+    ["TRABAJADOR","CARGO","SAL. PROPORCIONAL","DÍAS","BASE APORTES","SALUD (8.5%)","PENSIÓN (12%)","ARL (6.96%)","CCF (4%)","TOTAL EMPLEADOR"]
+  ];
+  todoPersonal.forEach(p=>{
+    const d    = diasMap[p.nombre]?.presentes||0;
+    const sal  = p.salario;
+    const salProp = Math.round(sal*d/30);
+    const base    = salProp;
+    pfData.push([
+      p.nombre, p.cargo, salProp, d, base,
+      Math.round(base*0.085), Math.round(base*0.12),
+      Math.round(base*0.0696), Math.round(base*0.04),
+      Math.round(base*(0.085+0.12+0.0696+0.04))
+    ]);
+  });
+  const pfTot = ["TOTALES",""];
+  for(let c=2; c<=9; c++){
+    pfTot.push(todoPersonal.reduce((s,p,i)=>s+(pfData[3+i]?.[c]||0),0));
+  }
+  pfData.push(pfTot);
+
+  const wsPF = XLSX.utils.aoa_to_sheet(pfData);
+  wsPF["!cols"] = [{wch:30},{wch:18},{wch:14},{wch:8},{wch:13},{wch:11},{wch:12},{wch:10},{wch:10},{wch:14}];
+  wsPF["!merges"] = [{s:{r:0,c:0},e:{r:0,c:9}},{s:{r:1,c:0},e:{r:1,c:9}}];
+  XLSX.utils.book_append_sheet(wb, wsPF, "Parafiscales");
+
+  // ═══════════════════════════════════════════════════
+  // HOJA 4: RESUMEN CONSOLIDADO
+  // ═══════════════════════════════════════════════════
+  const rsData = [
+    ["RESUMEN CONSOLIDADO — PROYECTO VIP SAN ANTONIO · "+obtenerMesNombre()+" "+ANIO_NUM],
+    ["TRABAJADOR","CARGO","DÍAS TRAB.","DÍAS AUS.","NÓM. DEDUCIBLE","HRS EXTRAS","VR HRS EXTRAS","PARAFISCALES","COSTO TOTAL EMPLEADOR","ESTADO"]
+  ];
+  todoPersonal.forEach(p=>{
+    const d      = diasMap[p.nombre]?.presentes||0;
+    const aus    = diasMap[p.nombre]?.ausentes||0;
+    const sal    = p.salario;
+    const aux    = sal<=2*SMMLV?AUX_T:0;
+    const salProp = Math.round(sal*d/30);
+    const auxProp = Math.round(aux*d/30);
+    const totDev  = salProp+auxProp;
+    const deduc   = Math.round(salProp*0.08);
+    const neto    = totDev-deduc;
+    const he      = heMap[p.nombre]||{horas:0,valor:0};
+    const base    = salProp;
+    const paraf   = Math.round(base*(0.085+0.12+0.0696+0.04));
+    const costo   = neto+he.valor+paraf;
+    rsData.push([
+      p.nombre, p.cargo, d, aus, neto,
+      Math.round(he.horas*10)/10, he.valor, paraf, costo,
+      p.activo?"✅ Activo":"🔴 Retirado"
+    ]);
+  });
+  const rsTot = ["TOTALES","","","",
+    ...([4,6,7,8].map(c=>todoPersonal.reduce((s,p,i)=>s+(rsData[2+i]?.[c]||0),0))),
+  ];
+  // insertamos en posiciones correctas
+  const rsTotRow = ["TOTALES","",
+    todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0),
+    todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.ausentes||0),0),
+    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0;const sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08);return s+(td-ded);},0),
+    Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.horas||0),0)*10)/10,
+    todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.valor||0),0),
+    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,sp=Math.round(sal*d/30);return s+Math.round(sp*0.2466);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0,sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08),neto=td-ded,he=heMap[p.nombre]||{valor:0},base=sp,paraf=Math.round(base*0.2466);return s+(neto+he.valor+paraf);},0),
+    "Total: "+todoPersonal.length
+  ];
+  rsData.push(rsTotRow);
+
+  const wsRS = XLSX.utils.aoa_to_sheet(rsData);
+  wsRS["!cols"] = [{wch:30},{wch:18},{wch:10},{wch:10},{wch:14},{wch:11},{wch:13},{wch:13},{wch:15},{wch:12}];
+  wsRS["!merges"] = [{s:{r:0,c:0},e:{r:0,c:9}}];
+  XLSX.utils.book_append_sheet(wb, wsRS, "Resumen");
+
+  // ── DESCARGAR ──────────────────────────────────────
+  const fecha = getFechaISO().replace(/\//g,"-");
+  XLSX.writeFile(wb, "Nomina_SanAntonio_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx");
+}
+
+function obtenerMesNombre(){
+  const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  return meses[new Date().getMonth()];
+}
+
+function aplicarFormatoNomina(ws, nPersonal){
+  // Formatos numéricos para columnas de valores
+  const rango = nPersonal + 6;
+  for(let r=6; r<=rango; r++){
+    ["F","G","H","I","J","K","L","M","N"].forEach(col=>{
+      const ref = col+r;
+      if(ws[ref]) ws[ref].z = col==="G"?"0":'#,##0';
+    });
+  }
+}
+
+function aplicarFormatoHE(ws, nPersonal, diasMes){
+  const rango = nPersonal + 3;
+  for(let r=3; r<=rango; r++){
+    for(let c=3; c<=2+diasMes; c++){
+      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
+      if(ws[ref] && typeof ws[ref].v === "number") ws[ref].z = "0.#";
+    }
+    // Columnas de valor
+    [2+diasMes+4, 2+diasMes+5, 2+diasMes+6].forEach(c=>{
+      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
+      if(ws[ref]) ws[ref].z = '#,##0';
+    });
+  }
 }
 
 function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
