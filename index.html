@@ -1157,14 +1157,14 @@ function heRenderCard(reg){
     }
 
     const colDirContent = esDir?
-      // Checkbox aprobación
+      // Select aprobación
       '<td style="text-align:center;padding:6px">'+
-        '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'+
-          '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--green)">'+
-            '<input type="checkbox" '+(rev.estado==='aprobado'?'checked':'')+
-            ' style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"'+
-            ' onchange="heRevision('+rid+',\''+apNom+'\',this.checked)"> Apruebo</label>'+
-        '</div>'+
+        '<select style="font-size:11px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font);cursor:pointer;'+(rev.estado==='aprobado'?'background:#f0fdf4;color:var(--green);font-weight:600':rev.estado==='rechazado'?'background:#fef2f2;color:var(--red);font-weight:600':'')+'"'+
+        ' onchange="heRevision('+rid+',\''+apNom+'\',this.value)">'+
+          '<option value="pendiente" '+((!rev.estado||rev.estado==='pendiente')?'selected':'')+'>— Seleccione —</option>'+
+          '<option value="aprobado" '+(rev.estado==='aprobado'?'selected':'')+'>✅ Apruebo</option>'+
+          '<option value="rechazado" '+(rev.estado==='rechazado'?'selected':'')+'>✖ No apruebo</option>'+
+        '</select>'+
       '</td>'+
       // Campo comentario
       '<td style="padding:4px 6px">'+
@@ -1443,7 +1443,7 @@ function heEnviar(){
 
 // Aprobación individual
 // Marcar aprobación/rechazo por trabajador individual
-function heRevision(id, nombre, aprobado){
+function heRevision(id, nombre, valor){
   const todos=getHorasExtras();
   const reg=todos.find(h=>h.id===id);
   if(!reg) return;
@@ -1451,8 +1451,10 @@ function heRevision(id, nombre, aprobado){
   if(!reg.revisionProy) reg.revisionProy={};
   const campo = rolActual.rol==="Director de Obra"?"revisionObra":"revisionProy";
   if(!reg[campo][nombre]) reg[campo][nombre]={estado:'pendiente',comentario:''};
-  reg[campo][nombre].estado = aprobado?'aprobado':'rechazado';
+  reg[campo][nombre].estado = valor; // 'aprobado', 'rechazado' o 'pendiente'
   setHorasExtras(todos);
+  // Actualizar color del select inmediatamente
+  irTab("horas_extras");
 }
 
 // Guardar comentario por trabajador individual
@@ -1479,13 +1481,14 @@ function heConfirmarRevision(id){
   const campo  = esObra?"revisionObra":"revisionProy";
   const rev    = reg[campo];
 
-  // Verificar que todos estén revisados
   const sinRevisar = reg.detalle.filter(d=>!rev[d.nombre]||rev[d.nombre].estado==='pendiente');
   if(sinRevisar.length>0){
-    if(!confirm("Hay "+sinRevisar.length+" trabajador(es) sin marcar. ¿Desea aprobarlos todos por defecto?")){return;}
+    if(!confirm("Hay "+sinRevisar.length+" trabajador(es) sin decisión.\n\n"+
+      sinRevisar.map(d=>"• "+d.nombre).join("\n")+
+      "\n\n¿Confirmar de todos modos? Los sin decisión quedarán como NO aprobados.")){return;}
     sinRevisar.forEach(d=>{
-      if(!rev[d.nombre]) rev[d.nombre]={estado:'aprobado',comentario:''};
-      else rev[d.nombre].estado='aprobado';
+      if(!rev[d.nombre]) rev[d.nombre]={estado:'rechazado',comentario:'Sin decisión del director'};
+      else rev[d.nombre].estado='rechazado';
     });
   }
 
@@ -1511,9 +1514,9 @@ function heConfirmarRevision(id){
   const aprobados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='aprobado').length;
   const rechazados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='rechazado').length;
   mostrarOk("✅ Revisión confirmada",
-    "Su revisión quedó registrada para el "+reg.fecha+".",
+    "Su revisión quedó registrada para el "+reg.fecha+". Los trabajadores no marcados quedan como no aprobados.",
     '<div class="ok-row"><span class="l">Aprobados</span><span>'+aprobados+' trabajadores</span></div>'+
-    '<div class="ok-row"><span class="l">Con observaciones</span><span>'+rechazados+' trabajadores</span></div>'+
+    '<div class="ok-row"><span class="l">No aprobados</span><span>'+rechazados+' trabajadores</span></div>'+
     '<div class="ok-row"><span class="l">Revisado por</span><span>'+rolActual.rol+'</span></div>');
 }
 
