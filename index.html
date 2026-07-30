@@ -947,11 +947,13 @@ function renderResumen(){
     </div>`).join("")}
   </div>` : "";
 
-  // Horas extras aprobadas por trabajador
-  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  // Horas extras aprobadas por trabajador (incluye parcialmente aprobadas)
+  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado"||h.estado==="aprobado_parcial");
   const heResumen={};
   heAprobadas.forEach(reg=>{
     reg.detalle.forEach(d=>{
+      // Solo contar trabajadores con estadoAprobacion==='aprobado' o registros sin revisión granular
+      if(d.estadoAprobacion && d.estadoAprobacion!=='aprobado') return;
       if(!heResumen[d.nombre]) heResumen[d.nombre]={horas:0,valor:0};
       heResumen[d.nombre].horas+=d.horas;
       heResumen[d.nombre].valor+=d.valor;
@@ -1157,7 +1159,6 @@ function heRenderCard(reg){
     }
 
     const colDirContent = esDir?
-      // Select aprobación
       '<td style="text-align:center;padding:6px">'+
         '<select style="font-size:11px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font);cursor:pointer;'+(rev.estado==='aprobado'?'background:#f0fdf4;color:var(--green);font-weight:600':rev.estado==='rechazado'?'background:#fef2f2;color:var(--red);font-weight:600':'')+'"'+
         ' onchange="heRevision('+rid+',\''+apNom+'\',this.value)">'+
@@ -1166,7 +1167,6 @@ function heRenderCard(reg){
           '<option value="rechazado" '+(rev.estado==='rechazado'?'selected':'')+'>✖ No apruebo</option>'+
         '</select>'+
       '</td>'+
-      // Campo comentario
       '<td style="padding:4px 6px">'+
         '<input type="text" placeholder="Comentario opcional..." value="'+(rev.comentario||'')+'"'+
         ' style="width:100%;font-size:11px;padding:4px 8px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"'+
@@ -1226,8 +1226,8 @@ function renderHorasExtras(){
   const esAprobador=["Director de Obra","Director de Proyecto"].includes(rolActual.rol);
   const esFinanzas=["Finanzas","CONSTRUCTHOR"].includes(rolActual.rol);
 
-  const pendientes=getHorasExtras().filter(h=>h.estado==="pendiente");
-  const aprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  const pendientes=getHorasExtras().filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
+  const aprobadas=getHorasExtras().filter(h=>h.estado==="aprobado"||h.estado==="aprobado_parcial");
 
   // Formulario de registro (SST)
   const formRegistro = rolActual.rol==="SST" ? `
@@ -1481,18 +1481,16 @@ function heConfirmarRevision(id){
   const campo  = esObra?"revisionObra":"revisionProy";
   const rev    = reg[campo];
 
-  const sinRevisar = reg.detalle.filter(d=>!rev[d.nombre]||rev[d.nombre].estado==='pendiente');
-  if(sinRevisar.length>0){
-    if(!confirm("Hay "+sinRevisar.length+" trabajador(es) sin decisión.\n\n"+
-      sinRevisar.map(d=>"• "+d.nombre).join("\n")+
-      "\n\n¿Confirmar de todos modos? Los sin decisión quedarán como NO aprobados.")){return;}
-    sinRevisar.forEach(d=>{
-      if(!rev[d.nombre]) rev[d.nombre]={estado:'rechazado',comentario:'Sin decisión del director'};
-      else rev[d.nombre].estado='rechazado';
-    });
+  // Verificar que todos tengan decisión
+  const sinDecision = reg.detalle.filter(d=>!rev[d.nombre]||rev[d.nombre].estado==='pendiente');
+  if(sinDecision.length>0){
+    alert("Faltan "+sinDecision.length+" trabajador(es) sin decisión:\n"+
+      sinDecision.map(d=>"• "+d.nombre).join("\n")+
+      "\n\nSeleccione 'Apruebo' o 'No apruebo' para cada uno antes de confirmar.");
+    return;
   }
 
-  // Determinar estado general según revisiones
+  // Actualizar estado general del director
   const hayRechazo = reg.detalle.some(d=>rev[d.nombre]?.estado==='rechazado');
   if(esObra){
     reg.aprobadoObra  = !hayRechazo;
@@ -1502,21 +1500,42 @@ function heConfirmarRevision(id){
     reg.rechazadoProy = hayRechazo;
   }
 
-  // Si ambos directores revisaron, actualizar estado general
-  const obraDone  = reg.aprobadoObra||reg.rechazadoObra;
-  const proyDone  = reg.aprobadoProy||reg.rechazadoProy;
-  if(obraDone && proyDone){
-    if(reg.aprobadoObra && reg.aprobadoProy) reg.estado='aprobado';
+  // Separar detalle en aprobados y pendientes
+  // Un trabajador está aprobado si AMBOS directores lo aprobaron
+  reg.detalle.forEach(d=>{
+    const ro = reg.revisionObra[d.nombre]||{};
+    const rp = reg.revisionProy[d.nombre]||{};
+    const obraOk  = ro.estado==='aprobado';
+    const proyOk  = rp.estado==='aprobado';
+    const obraRev = ro.estado==='rechazado';
+    const proyRev = rp.estado==='rechazado';
+    // Si alguno rechazó, queda pendiente con comentario
+    d.estadoAprobacion = (obraOk&&proyOk)?'aprobado':(obraRev||proyRev)?'no_aprobado':'pendiente_otro_director';
+    d.comentarioObra   = ro.comentario||'';
+    d.comentarioProy   = rp.comentario||'';
+  });
+
+  // Estado general del registro
+  const obraDone = reg.aprobadoObra||reg.rechazadoObra;
+  const proyDone = reg.aprobadoProy||reg.rechazadoProy;
+  if(obraDone&&proyDone){
+    const todosAprobados = reg.detalle.every(d=>d.estadoAprobacion==='aprobado');
+    const algunoAprobado = reg.detalle.some(d=>d.estadoAprobacion==='aprobado');
+    if(todosAprobados) reg.estado='aprobado';
+    else if(algunoAprobado) reg.estado='aprobado_parcial';
     else reg.estado='rechazado_parcial';
   }
 
   setHorasExtras(todos);
-  const aprobados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='aprobado').length;
-  const rechazados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='rechazado').length;
+  const aprobados =reg.detalle.filter(d=>d.estadoAprobacion==='aprobado').length;
+  const noAprobados=reg.detalle.filter(d=>d.estadoAprobacion==='no_aprobado').length;
+  const pendOtro  =reg.detalle.filter(d=>d.estadoAprobacion==='pendiente_otro_director').length;
+
   mostrarOk("✅ Revisión confirmada",
-    "Su revisión quedó registrada para el "+reg.fecha+". Los trabajadores no marcados quedan como no aprobados.",
-    '<div class="ok-row"><span class="l">Aprobados</span><span>'+aprobados+' trabajadores</span></div>'+
-    '<div class="ok-row"><span class="l">No aprobados</span><span>'+rechazados+' trabajadores</span></div>'+
+    "Su decisión quedó registrada para el "+reg.fecha+".",
+    '<div class="ok-row"><span class="l">✅ Aprobados</span><span>'+aprobados+' trabajadores</span></div>'+
+    (noAprobados>0?'<div class="ok-row"><span class="l">✖ No aprobados</span><span>'+noAprobados+' trabajadores</span></div>':'')+
+    (pendOtro>0?'<div class="ok-row"><span class="l">⏳ Pendiente otro director</span><span>'+pendOtro+' trabajadores</span></div>':'')+
     '<div class="ok-row"><span class="l">Revisado por</span><span>'+rolActual.rol+'</span></div>');
 }
 
@@ -1613,14 +1632,48 @@ function heEditar(id){
   const reg=todos.find(h=>h.id===id);
   if(!reg){alert("Registro no encontrado.");return;}
   if(reg.estado==="aprobado"){alert("No se puede editar un registro ya aprobado.");return;}
-  if(!confirm("¿Eliminar este registro para corregirlo y reenviarlo?")) return;
-  setHorasExtras(todos.filter(h=>h.id!==id));
-  heEstado.fecha=reg.fecha;
-  heEstado.tipo=reg.tipo;
+
+  // Precargar estado del formulario con los datos existentes
+  heEstado.fecha  = reg.fecha.split('/').reverse().join('-'); // DD/MM/YYYY → YYYY-MM-DD para input date
+  heEstado.tipo   = reg.tipo;
+  heEstado.horaInicio = reg.detalle[0]?.horaInicio||"";
+  heEstado.horaFin    = reg.detalle[0]?.horaFin||"";
+  heEstado.trabajadores = {};
+
+  // Precargar cada trabajador por nombre buscando su id en personal
+  const personal = getPersonal();
   reg.detalle.forEach(d=>{
-    heEstado.trabajadores[d.id]={incluido:true,horaInicio:d.horaInicio,horaFin:d.horaFin};
+    const p = personal.find(x=>x.nombre===d.nombre);
+    const pid = p?p.id:d.nombre; // fallback al nombre si no encuentra id
+    heEstado.trabajadores[pid]={
+      incluido:true,
+      horaInicio:d.horaInicio,
+      horaFin:d.horaFin
+    };
   });
+
+  // Eliminar el registro original solo después de precargar
+  setHorasExtras(todos.filter(h=>h.id!==id));
+
+  // Ir al tab con los datos precargados
   irTab("horas_extras");
+
+  // Aplicar valores al formulario después de renderizar
+  setTimeout(()=>{
+    const inputFecha = document.getElementById("he-fecha");
+    const inputTipo  = document.getElementById("he-tipo");
+    const inputIni   = document.getElementById("he-hora-inicio");
+    const inputFin   = document.getElementById("he-hora-fin");
+    if(inputFecha) inputFecha.value = heEstado.fecha;
+    if(inputTipo){
+      inputTipo.value = heEstado.tipo;
+      // Actualizar lista de trabajadores con horas precargadas
+      heRenderLista();
+    }
+    if(inputIni) inputIni.value = heEstado.horaInicio;
+    if(inputFin) inputFin.value = heEstado.horaFin;
+    heRenderLista();
+  }, 100);
 }
 
 // ══════════════════════════════════════════════════
