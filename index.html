@@ -1309,12 +1309,21 @@ function heRenderLista(){
 function heActualizarFecha(v){ heEstado.fecha=v; }
 function heActualizarTipo(v){
   heEstado.tipo=v;
-  // Ajustar hora de inicio por defecto según tipo
   const inputIni=document.getElementById("he-hora-inicio");
-  if(inputIni){
-    if(v==="semana") inputIni.value="16:00";
-    else inputIni.value="07:30";
+  const inputFin=document.getElementById("he-hora-fin");
+  if(v==="semana"){
+    if(inputIni) inputIni.value="16:00";
+    if(inputFin) inputFin.value="17:00";
+  } else if(v==="sabado"){
+    if(inputIni) inputIni.value="07:30";
+    if(inputFin) inputFin.value="13:00";
+  } else { // domingo
+    if(inputIni) inputIni.value="07:30";
+    if(inputFin) inputFin.value="15:30";
   }
+  // Propagar horas al estado global
+  if(inputIni) heEstado.horaInicio=inputIni.value;
+  if(inputFin) heEstado.horaFin=inputFin.value;
   heRenderLista();
 }
 function heActualizarHoraGlobal(campo,v){
