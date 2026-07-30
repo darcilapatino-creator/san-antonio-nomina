@@ -400,8 +400,8 @@ function renderTabs(){
 
 // Constantes jornada
 const HORA_INICIO_JORNADA = 7.5;  // 7:30 AM
-const HORA_FIN_JORNADA    = 16.5; // 4:30 PM entre semana
-const HORA_FIN_SABADO     = 11.5; // 11:30 AM sábado
+const HORA_FIN_JORNADA    = 16.0; // 4:00 PM entre semana (desde 15/jul/2026 — Ley reducción jornada)
+const HORA_FIN_SABADO     = 12.0; // 12:00 M sábado (desde 15/jul/2026 — Ley reducción jornada)
 const LS_HORAS = "nom_horas_extras";
 
 function getHorasExtras(){ const s=localStorage.getItem(LS_HORAS); return s?JSON.parse(s):[]; }
@@ -1052,7 +1052,7 @@ function calcularRecargo(tipo, horaInicio, horaFin){
   let pct=0, tipo_recargo="", horasExtra=hrs;
 
   if(tipo==="semana"){
-    // Extra diurna: 4:30 PM - 9 PM → 25% | Extra nocturna: después 9 PM → 75%
+    // Extra diurna: 4:00 PM - 9 PM → 25% | Extra nocturna: después 9 PM → 75%
     const corte=21;
     if(horaInicio>=corte){ pct=0.75; tipo_recargo="Extra nocturna (75%)"; }
     else if(horaFin<=corte){ pct=0.25; tipo_recargo="Extra diurna (25%)"; }
@@ -1063,12 +1063,12 @@ function calcularRecargo(tipo, horaInicio, horaFin){
       tipo_recargo="Extra mixta (diurna+nocturna)";
     }
   } else if(tipo==="sabado"){
-    // Jornada normal sábado: 7:30 AM - 11:30 AM
-    // Solo es extra lo que supere las 11:30 AM
+    // Jornada normal sábado: 7:30 AM - 12:00 M
+    // Solo es extra lo que supere las 12:00 M
     const finNormal=HORA_FIN_SABADO; // 11.5
     const inicioExtra=Math.max(horaInicio, finNormal);
     horasExtra=horaFin-inicioExtra;
-    if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:30-11:30)"};
+    if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:30-12:00)"};
     pct=0.75; tipo_recargo="Extra sábado (75%)";
   } else if(tipo==="domingo"){
     const corte=21;
@@ -1203,7 +1203,7 @@ function renderHorasExtras(){
     <div class="grid-2">
       <div class="field-group">
         <label class="field-label">⏰ Hora inicio (para todos)</label>
-        <input class="field-input" type="time" id="he-hora-inicio" value="16:30"
+        <input class="field-input" type="time" id="he-hora-inicio" value="16:00"
           onchange="heActualizarHoraGlobal('inicio',this.value)">
       </div>
       <div class="field-group">
@@ -1272,7 +1272,7 @@ function heRenderLista(){
   const cont=document.getElementById("he-lista-trab");
   if(!cont) return;
   const activos=getPersonal().filter(p=>p.activo);
-  const horaIni=document.getElementById("he-hora-inicio")?.value||"16:30";
+  const horaIni=document.getElementById("he-hora-inicio")?.value||"16:00";
   const horaFin=document.getElementById("he-hora-fin")?.value||"";
   cont.innerHTML=activos.map(p=>{
     const est=heEstado.trabajadores[p.id]||{incluido:true, horaInicio:horaIni, horaFin};
@@ -1312,7 +1312,7 @@ function heActualizarTipo(v){
   // Ajustar hora de inicio por defecto según tipo
   const inputIni=document.getElementById("he-hora-inicio");
   if(inputIni){
-    if(v==="semana") inputIni.value="16:30";
+    if(v==="semana") inputIni.value="16:00";
     else inputIni.value="07:30";
   }
   heRenderLista();
