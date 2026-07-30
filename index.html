@@ -1284,6 +1284,61 @@ function renderHorasExtras(){
     pendientes.concat(getHorasExtras().filter(h=>h.estado==="rechazado_parcial")).map(reg=>heRenderCard(reg)).join("")
     : "";
 
+  // Vista de seguimiento para SST — ve sus registros con estado resumido
+  const todosHE = getHorasExtras();
+  const seguimientoSST = rolActual.rol==="SST" && todosHE.length>0 ? `
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">
+    📋 Seguimiento de registros enviados (${todosHE.length})
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th><th>Valor</th>
+        <th>Dir. Obra</th><th>Dir. Proyecto</th><th>Estado</th><th></th>
+      </tr></thead>
+      <tbody>${todosHE.map(reg=>{
+        const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Dom/Festivo";
+        const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
+        const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+        const aprobadosObra=reg.detalle.filter(d=>reg.revisionObra&&reg.revisionObra[d.nombre]?.estado==='aprobado').length;
+        const aprobadosProy=reg.detalle.filter(d=>reg.revisionProy&&reg.revisionProy[d.nombre]?.estado==='aprobado').length;
+        const totalDet=reg.detalle.length;
+        const chipObra=reg.aprobadoObra
+          ?'<span class="badge b-ok">✅ Aprobó</span>'
+          :reg.rechazadoObra
+          ?'<span class="badge b-warn">⚠️ '+aprobadosObra+'/'+totalDet+'</span>'
+          :'<span class="badge b-pend" style="background:#f1f5f9;color:#64748b">⏳ Pendiente</span>';
+        const chipProy=reg.aprobadoProy
+          ?'<span class="badge b-ok">✅ Aprobó</span>'
+          :reg.rechazadoProy
+          ?'<span class="badge b-warn">⚠️ '+aprobadosProy+'/'+totalDet+'</span>'
+          :'<span class="badge b-pend" style="background:#f1f5f9;color:#64748b">⏳ Pendiente</span>';
+        const estadoBadge=reg.estado==='aprobado'
+          ?'<span class="badge b-ok">✅ Aprobado</span>'
+          :reg.estado==='aprobado_parcial'
+          ?'<span class="badge b-warn">⚠️ Parcial</span>'
+          :reg.estado==='rechazado_parcial'
+          ?'<span class="badge b-aus">⚠️ Con obs.</span>'
+          :'<span class="badge b-pend" style="background:#f1f5f9;color:#64748b">⏳ En revisión</span>';
+        const btnEditar=reg.estado!=='aprobado'
+          ?'<button class="btn btn-sm" onclick="heEditar('+reg.id+')">✏️ Editar</button>':
+          '<button class="btn btn-sm" disabled style="opacity:.4">✏️ Editar</button>';
+        return `<tr>
+          <td><strong>${reg.fecha}</strong></td>
+          <td>${tipoLabel}</td>
+          <td style="text-align:center">${totalDet}</td>
+          <td style="text-align:center">${totalHrs}h</td>
+          <td style="text-align:right;font-weight:600">$${totalVal.toLocaleString("es-CO")}</td>
+          <td style="text-align:center">${chipObra}</td>
+          <td style="text-align:center">${chipProy}</td>
+          <td style="text-align:center">${estadoBadge}</td>
+          <td>${btnEditar}</td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table>
+  </div>` : "";
+
   // Historial aprobadas
   const historial = aprobadas.length>0 ? `
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">
@@ -1312,7 +1367,7 @@ function renderHorasExtras(){
     ? `<div class="empty">⏱️<br>No hay registros de horas extras aún.</div>` : "";
 
   setTimeout(()=>heRenderLista(), 50);
-  return formRegistro + (pendientes.length===0&&!esAprobador&&!esFinanzas?"":pendCard) + historial + empty;
+  return formRegistro + seguimientoSST + (pendientes.length===0&&!esAprobador&&!esFinanzas?"":pendCard) + historial + empty;
 }
 
 function heRenderLista(){
