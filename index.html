@@ -1091,48 +1091,18 @@ let heEstado = {
 };
 
 function heRenderCard(reg){
-  const rechObra=reg.rechazadoObra;
-  const rechProy=reg.rechazadoProy;
+  const esObra  = rolActual.rol==="Director de Obra";
+  const esProy  = rolActual.rol==="Director de Proyecto";
+  const esDir   = esObra||esProy;
+  const esSST   = rolActual.rol==="SST";
 
-  const clsObra=reg.aprobadoObra?'chip-ok':rechObra?'chip-rech':'chip-pend';
-  const txtObra=reg.aprobadoObra?"✅ Raúl Echeverri":rechObra?"✖ Raúl rechazó":"⏳ Raúl Echeverri";
-  const clsProy=reg.aprobadoProy?'chip-ok':rechProy?'chip-rech':'chip-pend';
-  const txtProy=reg.aprobadoProy?"✅ Andrés Chaves":rechProy?"✖ Andrés rechazó":"⏳ Andrés Chaves";
+  // Chips de estado general (sin nombres)
+  const clsObra = reg.aprobadoObra?'chip-ok':reg.rechazadoObra?'chip-rech':'chip-pend';
+  const txtObra = reg.aprobadoObra?"✅ Dir. Obra":reg.rechazadoObra?"✖ Dir. Obra":"⏳ Dir. Obra";
+  const clsProy = reg.aprobadoProy?'chip-ok':reg.rechazadoProy?'chip-rech':'chip-pend';
+  const txtProy = reg.aprobadoProy?"✅ Dir. Proyecto":reg.rechazadoProy?"✖ Dir. Proyecto":"⏳ Dir. Proyecto";
   const chipObra='<div class="chip '+clsObra+'">'+txtObra+'</div>';
   const chipProy='<div class="chip '+clsProy+'">'+txtProy+'</div>';
-
-  let btnObra="";
-  if(rolActual.rol==="Director de Obra"){
-    if(reg.aprobadoObra) btnObra='<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>';
-    else if(rechObra) btnObra='<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra('+reg.id+')">↩️ Cambiar a aprobado</button>';
-    else btnObra='<button class="btn-aprov btn-aprov-obra" onclick="heAprobarObra('+reg.id+')">👷 Aprobar — Raúl Echeverri</button>'+
-      '<button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarObra('+reg.id+')">✖ Rechazar con motivo</button>';
-  } else {
-    const cls2=reg.aprobadoObra?' aprobado':'';
-    const lbl2=reg.aprobadoObra?"✅ Raúl aprobó":rechObra?"✖ Raúl rechazó":"⏳ Dir. Obra";
-    btnObra='<button class="btn-aprov btn-aprov-obra'+cls2+'" disabled>'+lbl2+'</button>';
-  }
-
-  let btnProy="";
-  if(rolActual.rol==="Director de Proyecto"){
-    if(reg.aprobadoProy) btnProy='<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>';
-    else if(rechProy) btnProy='<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy('+reg.id+')">↩️ Cambiar a aprobado</button>';
-    else btnProy='<button class="btn-aprov btn-aprov-proy" onclick="heAprobarProy('+reg.id+')">💼 Aprobar — Andrés Chaves</button>'+
-      '<button class="btn-aprov" style="background:#fef2f2;color:var(--red);border:1.5px solid #fca5a5;margin-top:4px" onclick="heRechazarProy('+reg.id+')">✖ Rechazar con motivo</button>';
-  } else {
-    const cls3=reg.aprobadoProy?' aprobado':'';
-    const lbl3=reg.aprobadoProy?"✅ Andrés aprobó":rechProy?"✖ Andrés rechazó":"⏳ Dir. Proyecto";
-    btnProy='<button class="btn-aprov btn-aprov-proy'+cls3+'" disabled>'+lbl3+'</button>';
-  }
-
-  let alertaRechazo="";
-  if((rechObra||rechProy)&&rolActual.rol==="SST"){
-    alertaRechazo='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px">'+
-      '<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">⚠️ Registro con observaciones — corrija y reenvíe</div>'+
-      (rechObra?'<div style="font-size:11px;color:#7f1d1d;margin-bottom:4px"><strong>Raúl Echeverri:</strong> "'+reg.motivoRechazoObra+'"</div>':"")+ 
-      (rechProy?'<div style="font-size:11px;color:#7f1d1d"><strong>Andrés Chaves:</strong> "'+reg.motivoRechazoProy+'"</div>':"")+ 
-      '</div>';
-  }
 
   const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Domingo/Festivo";
   const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
@@ -1140,17 +1110,93 @@ function heRenderCard(reg){
   const badgeColor=reg.estado==="rechazado_parcial"?"b-aus":"b-warn";
   const badgeLabel=reg.estado==="rechazado_parcial"?"CON OBSERVACIONES":"PENDIENTE";
 
-  const filasDet=reg.detalle.map(d=>
-    '<tr style="border-top:1px solid #e2e8f0">'+
-    '<td style="padding:4px 8px">'+d.nombre+'</td>'+
-    '<td style="text-align:center">'+d.horaInicio+'</td>'+
-    '<td style="text-align:center">'+d.horaFin+'</td>'+
-    '<td style="text-align:center">'+d.horas+'h</td>'+
-    '<td style="text-align:center;font-size:10px">'+d.tipo_recargo+'</td>'+
-    '<td style="text-align:right;font-weight:600">$'+d.valor.toLocaleString("es-CO")+'</td></tr>'
-  ).join("");
+  // Inicializar revisiones por trabajador si no existen
+  if(!reg.revisionObra)  reg.revisionObra  = {};
+  if(!reg.revisionProy)  reg.revisionProy  = {};
 
-  const btnSST=rolActual.rol==="SST"?
+  // Alerta para SST con observaciones por trabajador
+  let alertaRechazo="";
+  if(esSST){
+    const conObs=reg.detalle.filter(d=>{
+      const ro=reg.revisionObra[d.nombre]||{}; const rp=reg.revisionProy[d.nombre]||{};
+      return (ro.estado==='rechazado'&&ro.comentario)||(rp.estado==='rechazado'&&rp.comentario);
+    });
+    if(conObs.length>0){
+      alertaRechazo='<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:10px">'+
+        '<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:8px">⚠️ Observaciones de directores — corrija y reenvíe</div>'+
+        conObs.map(d=>{
+          const ro=reg.revisionObra[d.nombre]||{}; const rp=reg.revisionProy[d.nombre]||{};
+          return '<div style="margin-bottom:6px;padding:6px 8px;background:#fff;border-radius:6px;border:1px solid #fecaca">'+
+            '<div style="font-size:12px;font-weight:600;color:var(--negro)">'+d.nombre+'</div>'+
+            (ro.estado==='rechazado'&&ro.comentario?'<div style="font-size:11px;color:#7f1d1d;margin-top:2px">Dir. Obra: "'+ro.comentario+'"</div>':'')+
+            (rp.estado==='rechazado'&&rp.comentario?'<div style="font-size:11px;color:#7f1d1d;margin-top:2px">Dir. Proyecto: "'+rp.comentario+'"</div>':'')+
+            '</div>';
+        }).join('')+'</div>';
+    }
+  }
+
+  // Tabla de trabajadores — con checkboxes para directores
+  const colDir = esDir?'<th style="text-align:center;min-width:120px">'+
+    (esObra?'Dir. Obra':'Dir. Proyecto')+'</th><th style="min-width:140px">Comentario</th>':'';
+
+  const filasDet=reg.detalle.map(d=>{
+    const rev   = esObra?(reg.revisionObra[d.nombre]||{}):(reg.revisionProy[d.nombre]||{});
+    const apNom = d.nombre.replace(/'/g,"\\'");
+    const rid   = reg.id;
+
+    // Estado visual de esta fila para el director
+    let estFila='';
+    if(esDir){
+      if(rev.estado==='aprobado')       estFila='background:#f0fdf4';
+      else if(rev.estado==='rechazado') estFila='background:#fef2f2';
+    } else {
+      // Para SST y otros: mostrar estado de ambas revisiones
+      const ro=reg.revisionObra[d.nombre]||{}; const rp=reg.revisionProy[d.nombre]||{};
+      if(ro.estado==='rechazado'||rp.estado==='rechazado') estFila='background:#fef2f2';
+      else if(ro.estado==='aprobado'&&rp.estado==='aprobado') estFila='background:#f0fdf4';
+    }
+
+    const colDirContent = esDir?
+      // Checkbox aprobación
+      '<td style="text-align:center;padding:6px">'+
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'+
+          '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--green)">'+
+            '<input type="checkbox" '+(rev.estado==='aprobado'?'checked':'')+
+            ' style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"'+
+            ' onchange="heRevision('+rid+',\''+apNom+'\',this.checked)"> Apruebo</label>'+
+        '</div>'+
+      '</td>'+
+      // Campo comentario
+      '<td style="padding:4px 6px">'+
+        '<input type="text" placeholder="Comentario opcional..." value="'+(rev.comentario||'')+'"'+
+        ' style="width:100%;font-size:11px;padding:4px 8px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"'+
+        ' onchange="heComentario('+rid+',\''+apNom+'\',this.value)">'+
+      '</td>'
+      : '';
+
+    return '<tr style="border-top:1px solid #e2e8f0;'+estFila+'">'+
+      '<td style="padding:6px 8px;font-size:11px"><strong>'+d.nombre+'</strong><br><span style="color:var(--text3);font-size:10px">'+d.cargo+'</span></td>'+
+      '<td style="text-align:center;font-size:11px">'+d.horaInicio+'</td>'+
+      '<td style="text-align:center;font-size:11px">'+d.horaFin+'</td>'+
+      '<td style="text-align:center;font-size:11px;font-weight:600">'+d.horas+'h</td>'+
+      '<td style="text-align:center;font-size:10px">'+d.tipo_recargo+'</td>'+
+      '<td style="text-align:right;font-weight:600;font-size:11px">$'+d.valor.toLocaleString("es-CO")+'</td>'+
+      colDirContent+'</tr>';
+  }).join("");
+
+  // Botón confirmar revisión (directores)
+  let btnConfirmar="";
+  if(esDir){
+    const campo = esObra?'revisionObra':'revisionProy';
+    const rev   = esObra?reg.revisionObra:reg.revisionProy;
+    const total = reg.detalle.length;
+    const rev_count = Object.keys(rev).length;
+    btnConfirmar='<button class="btn btn-primary btn-block mt8" onclick="heConfirmarRevision('+reg.id+')">'+
+      '✅ Confirmar revisión ('+rev_count+'/'+total+' revisados)</button>';
+  }
+
+  // Botones SST
+  const btnSST=esSST?
     '<button class="btn-aprov" style="background:var(--lblue);color:var(--blue);border:1.5px solid #93c5fd;margin-top:6px" onclick="heEditar('+reg.id+')">✏️ Editar y reenviar</button>'+
     '<button class="btn-aprov btn-rechazar" onclick="heRechazar('+reg.id+')">✖ Eliminar registro</button>':"";
 
@@ -1163,15 +1209,16 @@ function heRenderCard(reg){
     '<div class="pend-dato"><strong>'+totalHrs+' horas</strong>Total horas</div>'+
     '<div class="pend-dato"><strong>$'+totalVal.toLocaleString("es-CO")+'</strong>Valor estimado</div>'+
     '<div class="pend-dato"><strong>'+reg.registradoPor+'</strong>Registrado por</div></div>'+
-    '<div style="margin-bottom:10px"><table style="width:100%;font-size:11px;border-collapse:collapse">'+
-    '<thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Trabajador</th>'+
-    '<th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th></tr></thead>'+
+    '<div style="margin-bottom:10px;overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'+
+    '<thead><tr style="background:#f1f5f9">'+
+    '<th style="padding:4px 8px;text-align:left">Trabajador</th>'+
+    '<th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th>'+
+    colDir+'</tr></thead>'+
     '<tbody>'+filasDet+'</tbody></table></div>'+
     '<div class="estado-chips">'+chipObra+chipProy+'</div>'+
-    '<div class="aprov-btns">'+
-    '<div style="display:flex;flex-direction:column;gap:4px">'+btnObra+'</div>'+
-    '<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">'+btnProy+'</div>'+
-    btnSST+'</div></div></div>';
+    btnConfirmar+
+    '<div class="aprov-btns" style="margin-top:8px">'+btnSST+'</div>'+
+    '</div></div>';
 }
 
 function renderHorasExtras(){
@@ -1315,7 +1362,7 @@ function heActualizarTipo(v){
     if(inputIni) inputIni.value="16:00";
     if(inputFin) inputFin.value="17:00";
   } else if(v==="sabado"){
-    if(inputIni) inputIni.value="07:30";
+    if(inputIni) inputIni.value="12:00";
     if(inputFin) inputFin.value="13:00";
   } else { // domingo
     if(inputIni) inputIni.value="07:30";
@@ -1395,6 +1442,81 @@ function heEnviar(){
 }
 
 // Aprobación individual
+// Marcar aprobación/rechazo por trabajador individual
+function heRevision(id, nombre, aprobado){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  if(!reg.revisionObra) reg.revisionObra={};
+  if(!reg.revisionProy) reg.revisionProy={};
+  const campo = rolActual.rol==="Director de Obra"?"revisionObra":"revisionProy";
+  if(!reg[campo][nombre]) reg[campo][nombre]={estado:'pendiente',comentario:''};
+  reg[campo][nombre].estado = aprobado?'aprobado':'rechazado';
+  setHorasExtras(todos);
+}
+
+// Guardar comentario por trabajador individual
+function heComentario(id, nombre, comentario){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  if(!reg.revisionObra) reg.revisionObra={};
+  if(!reg.revisionProy) reg.revisionProy={};
+  const campo = rolActual.rol==="Director de Obra"?"revisionObra":"revisionProy";
+  if(!reg[campo][nombre]) reg[campo][nombre]={estado:'pendiente',comentario:''};
+  reg[campo][nombre].comentario = comentario;
+  setHorasExtras(todos);
+}
+
+// Confirmar revisión completa del director
+function heConfirmarRevision(id){
+  const todos=getHorasExtras();
+  const reg=todos.find(h=>h.id===id);
+  if(!reg) return;
+  if(!reg.revisionObra) reg.revisionObra={};
+  if(!reg.revisionProy) reg.revisionProy={};
+  const esObra = rolActual.rol==="Director de Obra";
+  const campo  = esObra?"revisionObra":"revisionProy";
+  const rev    = reg[campo];
+
+  // Verificar que todos estén revisados
+  const sinRevisar = reg.detalle.filter(d=>!rev[d.nombre]||rev[d.nombre].estado==='pendiente');
+  if(sinRevisar.length>0){
+    if(!confirm("Hay "+sinRevisar.length+" trabajador(es) sin marcar. ¿Desea aprobarlos todos por defecto?")){return;}
+    sinRevisar.forEach(d=>{
+      if(!rev[d.nombre]) rev[d.nombre]={estado:'aprobado',comentario:''};
+      else rev[d.nombre].estado='aprobado';
+    });
+  }
+
+  // Determinar estado general según revisiones
+  const hayRechazo = reg.detalle.some(d=>rev[d.nombre]?.estado==='rechazado');
+  if(esObra){
+    reg.aprobadoObra  = !hayRechazo;
+    reg.rechazadoObra = hayRechazo;
+  } else {
+    reg.aprobadoProy  = !hayRechazo;
+    reg.rechazadoProy = hayRechazo;
+  }
+
+  // Si ambos directores revisaron, actualizar estado general
+  const obraDone  = reg.aprobadoObra||reg.rechazadoObra;
+  const proyDone  = reg.aprobadoProy||reg.rechazadoProy;
+  if(obraDone && proyDone){
+    if(reg.aprobadoObra && reg.aprobadoProy) reg.estado='aprobado';
+    else reg.estado='rechazado_parcial';
+  }
+
+  setHorasExtras(todos);
+  const aprobados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='aprobado').length;
+  const rechazados=reg.detalle.filter(d=>rev[d.nombre]?.estado==='rechazado').length;
+  mostrarOk("✅ Revisión confirmada",
+    "Su revisión quedó registrada para el "+reg.fecha+".",
+    '<div class="ok-row"><span class="l">Aprobados</span><span>'+aprobados+' trabajadores</span></div>'+
+    '<div class="ok-row"><span class="l">Con observaciones</span><span>'+rechazados+' trabajadores</span></div>'+
+    '<div class="ok-row"><span class="l">Revisado por</span><span>'+rolActual.rol+'</span></div>');
+}
+
 function heAprobarObra(id){
   const todos=getHorasExtras();
   const reg=todos.find(h=>h.id===id);
