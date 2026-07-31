@@ -349,7 +349,36 @@ function setAsistenciaHist(h){ localStorage.setItem(LS_ASISTENCIA,JSON.stringify
 // ══════════════════════════════════════════════════
 // STORAGE
 // ══════════════════════════════════════════════════
+const PERSONAL_VERSION = "2026-07-31-v1"; // Actualizar este valor cada vez que cambie el personal
+
 function getPersonal(){
+  // Si la versión del código es diferente a la guardada, actualizar automáticamente
+  const versionGuardada = localStorage.getItem('nom_personal_version');
+  if(versionGuardada !== PERSONAL_VERSION){
+    // Versión desactualizada — cargar lista base del código
+    // Preservar cambios locales (nuevos vinculados, retirados marcados desde la app)
+    const local = localStorage.getItem(LS_PERSONAL);
+    if(local){
+      const localData = JSON.parse(local);
+      // Combinar: usar PERSONAL_BASE como base y aplicar cambios locales
+      const merged = JSON.parse(JSON.stringify(PERSONAL));
+      localData.forEach(lp=>{
+        const idx = merged.findIndex(p=>p.id===lp.id);
+        if(idx>=0){
+          // Preservar estado activo/retiro que haya cambiado localmente
+          if(lp.fechaRetiro) merged[idx].fechaRetiro = lp.fechaRetiro;
+          if(!lp.activo)     merged[idx].activo = false;
+        } else if(lp.id > 24){
+          // Preservar nuevos vinculados desde la app (id > 24)
+          merged.push(lp);
+        }
+      });
+      localStorage.setItem(LS_PERSONAL, JSON.stringify(merged));
+    } else {
+      localStorage.setItem(LS_PERSONAL, JSON.stringify(PERSONAL));
+    }
+    localStorage.setItem('nom_personal_version', PERSONAL_VERSION);
+  }
   const s = localStorage.getItem(LS_PERSONAL);
   return s ? JSON.parse(s) : JSON.parse(JSON.stringify(PERSONAL));
 }
