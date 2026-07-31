@@ -928,7 +928,7 @@ function verificarActivacion(id){
 // ══════════════════════════════════════════════════
 function renderResumen(){
   const personal=getPersonal().filter(p=>p.activo);
-  const SMMLV=1300000, AUX_T=162000;
+  const SMMLV=1750905, AUX_T=249095;
   const filas=personal.map(p=>{
     const auxT=p.salario<=2*SMMLV?AUX_T:0;
     const deducSalud=p.salario*0.04;
@@ -1785,7 +1785,7 @@ function renderNomina(){
   const personal=getPersonal().filter(p=>p.activo);
   const hist=getAsistenciaHist();
   const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
-  const SMMLV=1423500, AUX_T=249095;
+  const SMMLV=1750905, AUX_T=249095;
 
   // Calcular días por trabajador desde historial
   const diasMap={};
@@ -1893,7 +1893,7 @@ function exportarNominaExcel(){
   const todoPersonal = getPersonal(); // incluye retirados
   const hist         = getAsistenciaHist();
   const heAprobadas  = getHorasExtras().filter(h=>h.estado==="aprobado");
-  const SMMLV = 1423500, AUX_T = 249095;
+  const SMMLV = 1750905, AUX_T = 249095;
   const MES_NUM = new Date().getMonth()+1;
   const ANIO_NUM = new Date().getFullYear();
   const DIAS_MES = new Date(ANIO_NUM, MES_NUM, 0).getDate();
