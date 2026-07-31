@@ -1335,8 +1335,6 @@ function heRenderCard(reg){
       '<td style="text-align:center;font-size:11px">'+d.horaInicio+'</td>'+
       '<td style="text-align:center;font-size:11px">'+d.horaFin+'</td>'+
       '<td style="text-align:center;font-size:11px;font-weight:600">'+d.horas+'h</td>'+
-      '<td style="text-align:center;font-size:10px">'+d.tipo_recargo+'</td>'+
-      '<td style="text-align:right;font-weight:600;font-size:11px">$'+d.valor.toLocaleString("es-CO")+'</td>'+
       chipObraEnFila+selectAprov+campoComentario+'</tr>';
   }).join("");
 
@@ -1363,12 +1361,11 @@ function heRenderCard(reg){
     '<div class="pend-datos">'+
     '<div class="pend-dato"><strong>'+reg.detalle.length+' trabajadores</strong>Con horas extras</div>'+
     '<div class="pend-dato"><strong>'+totalHrs+' horas</strong>Total horas</div>'+
-    '<div class="pend-dato"><strong>$'+totalVal.toLocaleString("es-CO")+'</strong>Valor estimado</div>'+
     '<div class="pend-dato"><strong>'+reg.registradoPor+'</strong>Registrado por</div></div>'+
     '<div style="margin-bottom:10px;overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'+
     '<thead><tr style="background:#f1f5f9">'+
     '<th style="padding:4px 8px;text-align:left">Trabajador</th>'+
-    '<th>Inicio</th><th>Fin</th><th>Horas</th><th>Recargo</th><th>Valor</th>'+
+    '<th>Inicio</th><th>Fin</th><th>Horas</th>'+
     colDir+'</tr></thead>'+
     '<tbody>'+filasDet+'</tbody></table></div>'+
     '<div class="estado-chips">'+chipObra+chipProy+'</div>'+
@@ -1449,7 +1446,7 @@ function renderHorasExtras(){
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th><th>Valor</th>
+        <th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th>
         <th>Dir. Obra</th><th>Dir. Proyecto</th><th>Estado</th><th></th>
       </tr></thead>
       <tbody>${todosHE.map(reg=>{
@@ -1648,8 +1645,7 @@ function heEnviar(){
   mostrarOk("¡Horas extras enviadas!",
     "El Director de Obra y el Director de Proyecto deben aprobar el registro.",
     '<div class="ok-row"><span class="l">Fecha</span><span>'+fechaReg+'</span></div>'+
-    '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>'+
-    '<div class="ok-row"><span class="l">Valor estimado</span><span>$'+totalVal.toLocaleString("es-CO")+'</span></div>');
+    '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>');
 }
 
 // Aprobación individual
