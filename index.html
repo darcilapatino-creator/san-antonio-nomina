@@ -1596,15 +1596,15 @@ function heActualizarHoraGlobal(campo,v){
   heRenderLista();
 }
 function heToggleTrab(id,val){
-  // Leer horas globales directamente del DOM para no depender del estado
+  // Leer horas globales directamente del DOM — siempre la fuente más confiable
   const horaIni = document.getElementById("he-hora-inicio")?.value || heEstado.horaInicio || "";
-  const horaFin = document.getElementById("he-hora-fin")?.value || heEstado.horaFin || "";
-  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:val, horaInicio:horaIni, horaFin};
-  heEstado.trabajadores[id].incluido=val;
-  // Si se está marcando, asegurar que tenga las horas globales
+  const horaFin = document.getElementById("he-hora-fin")?.value   || heEstado.horaFin    || "";
+  if(!heEstado.trabajadores[id]) heEstado.trabajadores[id]={incluido:false, horaInicio:"", horaFin:""};
+  heEstado.trabajadores[id].incluido = val;
+  // Al marcar siempre asignar las horas globales actuales del DOM
   if(val){
-    if(!heEstado.trabajadores[id].horaInicio) heEstado.trabajadores[id].horaInicio=horaIni;
-    if(!heEstado.trabajadores[id].horaFin)    heEstado.trabajadores[id].horaFin=horaFin;
+    heEstado.trabajadores[id].horaInicio = horaIni;
+    heEstado.trabajadores[id].horaFin    = horaFin;
   }
   heRenderLista();
 }
@@ -1646,7 +1646,7 @@ function heEnviar(){
   const totalVal=detalle.reduce((s,d)=>s+d.valor,0);
   const fechaReg=todos[todos.length-1].fecha;
   mostrarOk("¡Horas extras enviadas!",
-    "Raúl Echeverri y Andrés Chaves deben aprobar el registro.",
+    "El Director de Obra y el Director de Proyecto deben aprobar el registro.",
     '<div class="ok-row"><span class="l">Fecha</span><span>'+fechaReg+'</span></div>'+
     '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>'+
     '<div class="ok-row"><span class="l">Valor estimado</span><span>$'+totalVal.toLocaleString("es-CO")+'</span></div>');
