@@ -1358,6 +1358,7 @@ function heRenderCard(reg){
     '<div class="pend-header"><span class="badge '+badgeColor+'">'+badgeLabel+'</span>'+
     '<span class="pend-nombre">'+reg.fecha+' · '+tipoLabel+'</span></div>'+
     '<div class="pend-body">'+alertaRechazo+
+    (reg.motivo?'<div style="background:var(--lblue);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--blue)"><strong>📋 Motivo:</strong> '+reg.motivo+'</div>':'')+
     '<div class="pend-datos">'+
     '<div class="pend-dato"><strong>'+reg.detalle.length+' trabajadores</strong>Con horas extras</div>'+
     '<div class="pend-dato"><strong>'+totalHrs+' horas</strong>Total horas</div>'+
@@ -1417,6 +1418,18 @@ function renderHorasExtras(){
       Personal — desmarque quienes NO trabajaron / ajuste hora individual si llegaron diferente
     </div>
     <div id="he-lista-trab"></div>
+
+    <div class="field-group mt8">
+      <label class="field-label" style="color:var(--red)">
+        ⚠️ Motivo de las horas extras — obligatorio
+      </label>
+      <textarea class="field-input" id="he-motivo" rows="2"
+        placeholder="Ej: Trabajaron tiempo adicional para completar excavación de cimiento bloque C..."
+        style="resize:none;border-color:var(--red)"
+        oninput="document.getElementById('he-motivo').style.borderColor=this.value.trim()?'var(--green)':'var(--red)'"></textarea>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">Este comentario lo verán los directores para aprobar o rechazar.</div>
+    </div>
+
     <button class="btn btn-primary btn-block mt8" onclick="heEnviar()">📤 Enviar para aprobación de directores</button>
   </div>` : "";
 
@@ -1614,6 +1627,13 @@ function heCambiarHoraInd(id,campo,v){
 
 function heEnviar(){
   if(!heEstado.fecha){alert("Seleccione la fecha.");return;}
+  // Validar motivo obligatorio
+  const motivo=document.getElementById("he-motivo")?.value?.trim();
+  if(!motivo){
+    document.getElementById("he-motivo")?.focus();
+    alert("⚠️ El motivo de las horas extras es obligatorio.\n\nIndique por qué el personal trabajó tiempo adicional.");
+    return;
+  }
   const tipo=document.getElementById("he-tipo")?.value||"semana";
   const activos=getPersonal().filter(p=>p.activo);
   const detalle=[];
@@ -1633,19 +1653,19 @@ function heEnviar(){
   if(detalle.length===0){alert("No hay trabajadores con horas extras para registrar.");return;}
   const todos=getHorasExtras();
   todos.push({
-    id:Date.now(), fecha:heEstado.fecha, tipo,
+    id:Date.now(), fecha:heEstado.fecha, tipo, motivo,
     detalle, registradoPor:rolActual.nombre+" (SST)",
-    aprobadoObra:false, aprobadoProy:false, estado:"pendiente"
+    aprobadoObra:false, aprobadoProy:false, estado:"pendiente",
+    revisionObra:{}, revisionProy:{}
   });
   setHorasExtras(todos);
-  // Resetear estado
   heEstado={fecha:"",tipo:"semana",horaInicio:"",horaFin:"",trabajadores:{}};
-  const totalVal=detalle.reduce((s,d)=>s+d.valor,0);
   const fechaReg=todos[todos.length-1].fecha;
   mostrarOk("¡Horas extras enviadas!",
     "El Director de Obra y el Director de Proyecto deben aprobar el registro.",
     '<div class="ok-row"><span class="l">Fecha</span><span>'+fechaReg+'</span></div>'+
-    '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>');
+    '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>'+
+    '<div class="ok-row"><span class="l">Motivo</span><span style="font-size:10px;text-align:right;max-width:160px">'+motivo+'</span></div>');
 }
 
 // Aprobación individual
