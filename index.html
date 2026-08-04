@@ -395,36 +395,35 @@ function getURL(){ return localStorage.getItem(LS_URL)||""; }
 // PIN
 // ══════════════════════════════════════════════════
 // ── SELECTOR DE ROL ───────────────────────────────────────────
+let rolSeleccionado = "";
+
 function seleccionarRol(pin){
   pinBuffer="";
   for(let i=0;i<4;i++) document.getElementById("d"+i)?.classList.remove("filled");
   document.getElementById("pinError").textContent="";
   if(pin){
+    rolSeleccionado = pin;
     document.getElementById("pinSection").style.display="block";
-    // Si el PIN seleccionado es válido, autocompletarlo
-    if(ROLES[pin]){
-      // Simular ingreso del PIN automáticamente
-      pinBuffer=pin;
-      for(let i=0;i<4;i++) document.getElementById("d"+i)?.classList.add("filled");
-      setTimeout(()=>{
-        rolActual=ROLES[pin];
-        iniciarSesion();
-      },300);
-    }
   } else {
+    rolSeleccionado = "";
     document.getElementById("pinSection").style.display="none";
   }
 }
 
 function pinKey(k){
+  // Verificar que haya seleccionado un rol primero
+  if(!rolSeleccionado){
+    document.getElementById("pinError").textContent="Selecciona tu rol primero.";
+    return;
+  }
   const err = document.getElementById("pinError");
   if(k==="C"){ pinBuffer=pinBuffer.slice(0,-1); }
   else if(pinBuffer.length<4){ pinBuffer+=k; }
-  // dots
   for(let i=0;i<4;i++) document.getElementById("d"+i).classList.toggle("filled", i<pinBuffer.length);
   err.textContent="";
   if(pinBuffer.length===4){
-    if(ROLES[pinBuffer]){
+    // Validar que el PIN ingresado corresponda al rol seleccionado
+    if(pinBuffer === rolSeleccionado && ROLES[pinBuffer]){
       rolActual = ROLES[pinBuffer];
       iniciarSesion();
     } else {
@@ -445,9 +444,12 @@ function iniciarSesion(){
 }
 
 function cerrarSesion(){
-  rolActual=null; pinBuffer="";
+  rolActual=null; pinBuffer=""; rolSeleccionado="";
   for(let i=0;i<4;i++) document.getElementById("d"+i).classList.remove("filled");
   document.getElementById("pinError").textContent="";
+  document.getElementById("pinSection").style.display="none";
+  const sel=document.getElementById("rolSelect");
+  if(sel) sel.value="";
   document.getElementById("sc-main").classList.remove("active");
   document.getElementById("sc-login").classList.add("active");
 }
