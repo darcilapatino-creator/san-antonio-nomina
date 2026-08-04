@@ -205,8 +205,23 @@ select.field-input{cursor:pointer}
     </div>
   </div>
     <div class="login-card">
-    <div class="login-title">Ingrese su PIN</div>
-    <div class="login-sub">Acceso restringido al personal autorizado</div>
+    <div class="login-title">Acceso al sistema</div>
+    <div class="login-sub">Selecciona tu rol e ingresa tu PIN</div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Selecciona tu rol</label>
+      <select id="rolSelect" onchange="seleccionarRol(this.value)"
+        style="width:100%;padding:10px 12px;border:1.5px solid var(--gray3);border-radius:var(--radio-sm);font-size:13px;font-family:var(--font);color:var(--text1);background:var(--blanco);outline:none;cursor:pointer">
+        <option value="">— Seleccionar —</option>
+        <option value="5647">Residente SISO</option>
+        <option value="3951">Director de Obra</option>
+        <option value="6173">Director de Proyecto</option>
+        <option value="4829">Finanzas</option>
+        <option value="2038">CONSTRUCTHOR</option>
+        <option value="7284">Residente de Obra</option>
+      </select>
+    </div>
+    <div id="pinSection" style="display:none">
+      <label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">Ingresa tu PIN</label>
     <div class="pin-dots">
       <div class="pin-dot" id="d0"></div>
       <div class="pin-dot" id="d1"></div>
@@ -228,6 +243,7 @@ select.field-input{cursor:pointer}
       <button class="pin-key" style="opacity:.3" disabled></button>
     </div>
     <div class="pin-error" id="pinError"></div>
+    </div><!-- cierre pinSection -->
   </div>
 </div>
 </div>
@@ -378,6 +394,28 @@ function getURL(){ return localStorage.getItem(LS_URL)||""; }
 // ══════════════════════════════════════════════════
 // PIN
 // ══════════════════════════════════════════════════
+// ── SELECTOR DE ROL ───────────────────────────────────────────
+function seleccionarRol(pin){
+  pinBuffer="";
+  for(let i=0;i<4;i++) document.getElementById("d"+i)?.classList.remove("filled");
+  document.getElementById("pinError").textContent="";
+  if(pin){
+    document.getElementById("pinSection").style.display="block";
+    // Si el PIN seleccionado es válido, autocompletarlo
+    if(ROLES[pin]){
+      // Simular ingreso del PIN automáticamente
+      pinBuffer=pin;
+      for(let i=0;i<4;i++) document.getElementById("d"+i)?.classList.add("filled");
+      setTimeout(()=>{
+        rolActual=ROLES[pin];
+        iniciarSesion();
+      },300);
+    }
+  } else {
+    document.getElementById("pinSection").style.display="none";
+  }
+}
+
 function pinKey(k){
   const err = document.getElementById("pinError");
   if(k==="C"){ pinBuffer=pinBuffer.slice(0,-1); }
@@ -1465,10 +1503,9 @@ function renderHorasExtras(){
       <tbody>${todosHE.map(reg=>{
         const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Dom/Festivo";
         const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
-        const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
+        const totalDet=reg.detalle.length;
         const aprobadosObra=reg.detalle.filter(d=>reg.revisionObra&&reg.revisionObra[d.nombre]?.estado==='aprobado').length;
         const aprobadosProy=reg.detalle.filter(d=>reg.revisionProy&&reg.revisionProy[d.nombre]?.estado==='aprobado').length;
-        const totalDet=reg.detalle.length;
         const chipObra=reg.aprobadoObra
           ?'<span class="badge b-ok">✅ Aprobó</span>'
           :reg.rechazadoObra
@@ -1494,7 +1531,6 @@ function renderHorasExtras(){
           <td>${tipoLabel}</td>
           <td style="text-align:center">${totalDet}</td>
           <td style="text-align:center">${totalHrs}h</td>
-          <td style="text-align:right;font-weight:600">$${totalVal.toLocaleString("es-CO")}</td>
           <td style="text-align:center">${chipObra}</td>
           <td style="text-align:center">${chipProy}</td>
           <td style="text-align:center">${estadoBadge}</td>
@@ -1512,16 +1548,14 @@ function renderHorasExtras(){
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th><th>Valor total</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th><th>Estado</th></tr></thead>
       <tbody>${aprobadas.map(reg=>{
         const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Dom/Festivo";
         const totalHrs=reg.detalle.reduce((s,d)=>s+d.horas,0).toFixed(1);
-        const totalVal=reg.detalle.reduce((s,d)=>s+d.valor,0);
         return `<tr>
           <td>${reg.fecha}</td><td>${tipoLabel}</td>
           <td style="text-align:center">${reg.detalle.length}</td>
           <td style="text-align:center">${totalHrs}h</td>
-          <td style="text-align:right;font-weight:600">$${totalVal.toLocaleString("es-CO")}</td>
           <td><span class="badge b-ok">Aprobado</span></td>
         </tr>`;
       }).join("")}
