@@ -145,6 +145,14 @@ select.field-input{cursor:pointer}
 .nov-opt{padding:9px 12px;border-radius:var(--radius-sm);border:1.5px solid #fecaca;background:#fff;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;font-family:var(--font)}
 .nov-opt.sel{border-color:var(--red);background:#fef2f2;color:var(--red);font-weight:600}
 .nov-obs{width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid #fecaca;border-radius:var(--radius-sm);font-size:12px;font-family:var(--font);resize:none;outline:none;background:#fff}
+.salida-toggle-row{padding:0 14px 10px 14px;border-top:1px solid var(--gray3)}
+.salida-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;padding-top:10px}
+.salida-check input{cursor:pointer}
+.salida-panel{display:none;background:var(--yellow);border-top:1px solid var(--amber);padding:12px 14px}
+.salida-panel.vis{display:block}
+.salida-label{font-size:11px;font-weight:600;color:#856404;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+.salida-hora{width:100%;padding:8px 10px;border:1.5px solid var(--amber);border-radius:var(--radius-sm);font-size:13px;font-family:var(--font);margin-bottom:8px;outline:none}
+.salida-obs{width:100%;padding:8px 10px;border:1.5px solid var(--amber);border-radius:var(--radius-sm);font-size:12px;font-family:var(--font);resize:none;outline:none;background:#fff}
 .contadores{display:flex;gap:8px;margin-bottom:14px}
 .cnt{flex:1;background:var(--white);border:1px solid var(--gray3);border-radius:var(--radius);padding:10px;text-align:center;box-shadow:var(--shadow)}
 .cnt-num{font-size:20px;font-weight:700}
@@ -359,6 +367,11 @@ let rolActual  = null;
 let tabActual  = null;
 let pinBuffer  = "";
 let estadoAsis = {};
+let fechaAsisSel = null; // fecha elegida manualmente (DD/MM/YYYY) para registro retroactivo; null = hoy
+
+function dmyToIso(dmy){ const [d,m,y]=dmy.split("/"); return `${y}-${m}-${d}`; }
+function isoToDmy(iso){ const [y,m,d]=iso.split("-"); return `${d}/${m}/${y}`; }
+function cambiarFechaAsis(iso){ fechaAsisSel = iso ? isoToDmy(iso) : null; irTab("asistencia"); }
 
 // ══════════════════════════════════════════════════
 // STORAGE
@@ -495,7 +508,7 @@ function irTab(id){
 // ══════════════════════════════════════════════════
 function initEstadoAsis(){
   getPersonal().filter(p=>p.activo).forEach(p=>{
-    if(!estadoAsis[p.id]) estadoAsis[p.id]={presente:null,novedad:null,obs:""};
+    if(!estadoAsis[p.id]) estadoAsis[p.id]={presente:null,novedad:null,obs:"",salidaAnt:false,horaSalida:""};
   });
 }
 
@@ -506,11 +519,25 @@ function renderAsistencia(){
   const pend=activos.filter(p=>estadoAsis[p.id]?.presente===null).length;
 
   const tarjetas=activos.map(p=>{
-    const e=estadoAsis[p.id]||{presente:null,novedad:null,obs:""};
+    const e=estadoAsis[p.id]||{presente:null,novedad:null,obs:"",salidaAnt:false,horaSalida:""};
     const esPres=e.presente===true, esAus=e.presente===false;
     const opts=NOVEDADES_TIPOS.map(n=>`
       <button class="nov-opt${e.novedad===n.id?' sel':''}" onclick="selNov(${p.id},'${n.id}',this)">
         ${n.icon} ${n.label}</button>`).join("");
+    const salidaBlock = esPres ? `
+      <div class="salida-toggle-row">
+        <label class="salida-check">
+          <input type="checkbox" ${e.salidaAnt?'checked':''} onchange="toggleSalidaAnt(${p.id},this.checked)">
+          🕐 Salida anticipada
+        </label>
+      </div>
+      <div class="salida-panel${e.salidaAnt?' vis':''}" id="spanel-${p.id}">
+        <div class="salida-label">Hora de salida</div>
+        <input type="time" class="salida-hora" value="${e.horaSalida||''}"
+          onchange="estadoAsis[${p.id}].horaSalida=this.value">
+        <textarea class="salida-obs" rows="2" placeholder="Motivo de la salida anticipada..."
+          onchange="estadoAsis[${p.id}].obs=this.value">${e.obs||""}</textarea>
+      </div>` : "";
     return `
     <div class="trabajador-row${esPres?' presente':esAus?' ausente':''}" id="trow-${p.id}">
       <div class="trab-top" onclick="toggleAsis(${p.id})">
@@ -521,6 +548,7 @@ function renderAsistencia(){
         </div>
         <button class="toggle${esPres?' on':' off'}" onclick="event.stopPropagation();toggleAsis(${p.id})"></button>
       </div>
+      ${salidaBlock}
       <div class="nov-panel${esAus?' vis':''}" id="npanel-${p.id}">
         <div class="nov-label">¿Por qué no está en obra?</div>
         <div class="nov-opts">${opts}</div>
@@ -539,8 +567,14 @@ function renderAsistencia(){
       </div></div>
     </div>` : "";
 
+  const fechaSelActual = fechaAsisSel || getFechaISO();
   return `
   ${urlBanner}
+  <div class="field-group">
+    <label class="field-label">📅 Fecha del registro${fechaAsisSel?' (retroactivo)':''}</label>
+    <input type="date" class="field-input" id="fechaAsisInput" value="${dmyToIso(fechaSelActual)}"
+      onchange="cambiarFechaAsis(this.value)">
+  </div>
   <div class="contadores">
     <div class="cnt"><div class="cnt-num" style="color:var(--green)">${pres}</div><div class="cnt-lab">Presentes</div></div>
     <div class="cnt"><div class="cnt-num" style="color:var(--red)">${aus}</div><div class="cnt-lab">Ausentes</div></div>
@@ -556,10 +590,17 @@ function renderAsistencia(){
 }
 
 function toggleAsis(id){
-  if(!estadoAsis[id]) estadoAsis[id]={presente:null,novedad:null,obs:""};
+  if(!estadoAsis[id]) estadoAsis[id]={presente:null,novedad:null,obs:"",salidaAnt:false,horaSalida:""};
   const e=estadoAsis[id];
   e.presente=(e.presente===null||e.presente===true)?false:true;
-  if(e.presente) e.novedad=null;
+  if(e.presente){ e.novedad=null; }
+  else { e.salidaAnt=false; e.horaSalida=""; e.obs=""; }
+  irTab("asistencia");
+}
+function toggleSalidaAnt(id,checked){
+  if(!estadoAsis[id]) estadoAsis[id]={presente:true,novedad:null,obs:"",salidaAnt:false,horaSalida:""};
+  estadoAsis[id].salidaAnt=checked;
+  if(!checked) estadoAsis[id].horaSalida="";
   irTab("asistencia");
 }
 function selNov(id,novId,btn){
@@ -587,7 +628,7 @@ function getRetiros(){
 }
 function setRetiros(r){ localStorage.setItem(LS_RETIROS,JSON.stringify(r)); }
 function todosPresentes(){
-  getPersonal().filter(p=>p.activo).forEach(p=>{ estadoAsis[p.id]={presente:true,novedad:null,obs:""}; });
+  getPersonal().filter(p=>p.activo).forEach(p=>{ estadoAsis[p.id]={presente:true,novedad:null,obs:"",salidaAnt:false,horaSalida:""}; });
   irTab("asistencia");
 }
 function guardarURL(){
@@ -602,13 +643,15 @@ async function enviarAsistencia(){
   if(sinMarcar.length){alert("Faltan por marcar:\n"+sinMarcar.map(p=>p.nombre).join("\n"));return;}
   const sinNov=activos.filter(p=>estadoAsis[p.id].presente===false&&!estadoAsis[p.id].novedad);
   if(sinNov.length){alert("Seleccione el tipo de ausencia para:\n"+sinNov.map(p=>p.nombre).join("\n"));return;}
-  const fecha=getFechaISO();
+  const fecha=fechaAsisSel||getFechaISO();
   const pres=activos.filter(p=>estadoAsis[p.id].presente).length;
   const aus=activos.length-pres;
   const filas=activos.map(p=>({
     fecha,nombre:p.nombre,cargo:p.cargo,
     estado:estadoAsis[p.id].presente?"Presente":"Ausente",
-    novedad:estadoAsis[p.id].novedad?NOVEDADES_TIPOS.find(n=>n.id===estadoAsis[p.id].novedad)?.label||"":"",
+    novedad:estadoAsis[p.id].novedad?NOVEDADES_TIPOS.find(n=>n.id===estadoAsis[p.id].novedad)?.label||"":(estadoAsis[p.id].salidaAnt?"Salida anticipada":""),
+    salidaAnticipada:!!estadoAsis[p.id].salidaAnt,
+    horaSalida:estadoAsis[p.id].horaSalida||"",
     observacion:estadoAsis[p.id].obs||"",
     hora:new Date().toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"}),
     registradoPor:"Yenny P. Vargas (SST)"
@@ -666,7 +709,8 @@ async function enviarAsistencia(){
      <div class="ok-row"><span class="l">Presentes</span><span>${pres} personas</span></div>
      <div class="ok-row"><span class="l">Ausentes</span><span>${aus} personas</span></div>
      <div class="ok-row"><span class="l">Registrado por</span><span>SST</span></div>`);
-  activos.forEach(p=>{ estadoAsis[p.id]={presente:null,novedad:null,obs:""}; });
+  activos.forEach(p=>{ estadoAsis[p.id]={presente:null,novedad:null,obs:"",salidaAnt:false,horaSalida:""}; });
+  fechaAsisSel=null;
 }
 
 // ══════════════════════════════════════════════════
