@@ -748,10 +748,12 @@ function abrirCorreccion(fecha){
   if(!reg){alert("Registro no encontrado.");return;}
 
   const filas=reg.filas.map(f=>{
-    const novOpts=NOVEDADES_TIPOS.filter(n=>!n.retiro).map(n=>
-      `<option value="${n.label}" ${f.novedad===n.label?"selected":""}>${n.label}</option>`).join("");
+    const idSafe=f.nombre.replace(/\s/g,'_');
+    const novOpts=NOVEDADES_TIPOS.map(n=>
+      `<option value="${n.label}" data-retiro="${n.retiro?1:0}" ${f.novedad===n.label?"selected":""}>${n.icon} ${n.label}</option>`).join("");
+    const yaEsRetiro=NOVEDADES_TIPOS.find(n=>n.label===f.novedad)?.retiro;
     return `
-    <tr id="fila-cor-${f.nombre.replace(/\s/g,'_')}">
+    <tr id="fila-cor-${idSafe}">
       <td style="font-size:12px"><strong>${f.nombre}</strong><br><span class="muted">${f.cargo}</span></td>
       <td>
         <select style="font-size:12px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
@@ -761,10 +763,13 @@ function abrirCorreccion(fecha){
         </select>
       </td>
       <td>
-        <select style="font-size:12px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
-          onchange="corNovedad('${f.nombre.replace(/'/g,"\\'")}',this.value)">
+        <select id="cor-nov-${idSafe}" style="font-size:12px;padding:4px 6px;border:1px solid var(--gray3);border-radius:4px;font-family:var(--font)"
+          onchange="corNovedad('${f.nombre.replace(/'/g,"\\'")}',this.value,'${idSafe}')">
           <option value="">— Sin novedad —</option>${novOpts}
         </select>
+        <div id="cor-warn-${idSafe}" style="display:${yaEsRetiro?'block':'none'};font-size:11px;color:#991b1b;font-weight:600;margin-top:4px">
+          ⚠️ Al guardar, este trabajador quedará desactivado del sistema.
+        </div>
       </td>
     </tr>`;
   }).join("");
@@ -797,9 +802,12 @@ function corEstado(nombre,val){
   const f=window._corBuffer.find(x=>x.nombre===nombre);
   if(f){ f.estado=val; if(val==="Presente") f.novedad=""; }
 }
-function corNovedad(nombre,val){
+function corNovedad(nombre,val,idSafe){
   const f=window._corBuffer.find(x=>x.nombre===nombre);
   if(f) f.novedad=val;
+  const esRetiro=NOVEDADES_TIPOS.find(n=>n.label===val)?.retiro;
+  const warn=document.getElementById('cor-warn-'+idSafe);
+  if(warn) warn.style.display=esRetiro?'block':'none';
 }
 
 function guardarCorreccion(fecha){
@@ -815,9 +823,37 @@ function guardarCorreccion(fecha){
     motivo,
     antes:hist[idx].filas
   });
-  hist[idx].filas=JSON.parse(JSON.stringify(window._corBuffer));
+  const filasNuevas=JSON.parse(JSON.stringify(window._corBuffer));
+  hist[idx].filas=filasNuevas;
   setAsistenciaHist(hist);
-  mostrarOk("✅ Corrección guardada",`El registro del ${fecha} fue actualizado.`,
+
+  // Procesar retiros marcados en esta corrección (renuncia/despido/fin de obra)
+  const personal=getPersonal();
+  const histRetiros=getRetiros();
+  let huboRetiro=false;
+  filasNuevas.forEach(f=>{
+    const tipo=NOVEDADES_TIPOS.find(n=>n.label===f.novedad);
+    if(tipo?.retiro){
+      const pIdx=personal.findIndex(p=>p.nombre===f.nombre&&p.activo);
+      if(pIdx>=0){
+        histRetiros.push({
+          nombre:personal[pIdx].nombre,
+          cargo:personal[pIdx].cargo,
+          salario:personal[pIdx].salario,
+          motivo:f.novedad,
+          fecha:f.fecha,
+          observacion:(f.observacion||"—")+" [Vía corrección: "+motivo+"]",
+          registradoPor:rolActual.nombre+" ("+rolActual.rol+")"
+        });
+        personal[pIdx].activo=false;
+        delete estadoAsis[personal[pIdx].id];
+        huboRetiro=true;
+      }
+    }
+  });
+  if(huboRetiro){ setPersonal(personal); setRetiros(histRetiros); }
+
+  mostrarOk("✅ Corrección guardada",`El registro del ${fecha} fue actualizado.`+(huboRetiro?" El trabajador quedó desactivado del sistema y Finanzas debe ser notificado.":""),
     `<div class="ok-row"><span class="l">Motivo</span><span>${motivo}</span></div>
      <div class="ok-row"><span class="l">Corregido por</span><span>${rolActual.nombre}</span></div>`);
 }
