@@ -458,19 +458,19 @@ async function fetchAsistenciaHist(forzar){
 // ── HorasExtras: helpers de sincronización con Airtable ──
 function mapearHorasExtrasAT(rec){
   const f = rec.fields || {};
-  let detalle=[], aprobObra={}, aprobProy={}, revObra={}, revProy={};
+  let detalle=[], revObra={}, revProy={};
   try{ detalle = JSON.parse(f.Detalle||"[]"); }catch(e){}
-  try{ aprobObra = JSON.parse(f.AprobadoObra||"{}"); }catch(e){}
-  try{ aprobProy = JSON.parse(f.AprobadoProy||"{}"); }catch(e){}
   try{ revObra = JSON.parse(f.RevisionObra||"{}"); }catch(e){}
   try{ revProy = JSON.parse(f.RevisionProy||"{}"); }catch(e){}
+  const metaObra = revObra._meta||{}; delete revObra._meta;
+  const metaProy = revProy._meta||{}; delete revProy._meta;
   return {
     id: parseInt(f.AppId,10) || Date.now(),
     fecha: f.Fecha||"", tipo: f.Tipo||"", motivo: f.Motivo||"",
     detalle, estado: f.Estado||"pendiente",
     registradoPor: f.RegistradoPor||"",
-    aprobadoObra: !!aprobObra.aprobado, rechazadoObra: !!aprobObra.rechazado, motivoRechazoObra: aprobObra.motivoRechazo||"",
-    aprobadoProy: !!aprobProy.aprobado, rechazadoProy: !!aprobProy.rechazado, motivoRechazoProy: aprobProy.motivoRechazo||"",
+    aprobadoObra: !!f.AprobadoObra, rechazadoObra: !!metaObra.rechazado, motivoRechazoObra: metaObra.motivoRechazo||"",
+    aprobadoProy: !!f.AprobadoProy, rechazadoProy: !!metaProy.rechazado, motivoRechazoProy: metaProy.motivoRechazo||"",
     revisionObra: revObra, revisionProy: revProy
   };
 }
