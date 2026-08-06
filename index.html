@@ -384,19 +384,26 @@ function setAsistenciaHist(h){ localStorage.setItem(LS_ASISTENCIA,JSON.stringify
 // STORAGE
 // ══════════════════════════════════════════════════
 function getPersonal(){
-  // El personal base siempre viene del código
-  // Solo se guardan en localStorage los nuevos vinculados desde la app (id > 24)
+  // El personal base siempre viene del código (nombre, cargo, salario nunca se pierden)
+  // Solo se guardan en localStorage: (a) los nuevos vinculados desde la app (id > 24)
+  // y (b) el estado "activo" del personal base cuando se retira (id 1-24)
   const local = localStorage.getItem(LS_PERSONAL);
-  const nuevosVinculados = local
-    ? JSON.parse(local).filter(p=>p.id>24)
-    : [];
-  return JSON.parse(JSON.stringify(PERSONAL)).concat(nuevosVinculados);
+  const guardado = local ? JSON.parse(local) : [];
+  const nuevosVinculados = guardado.filter(p=>p.id>24);
+  const overridesBase = {};
+  guardado.filter(p=>p.id<=24).forEach(p=>{ overridesBase[p.id]=p.activo; });
+  const base = JSON.parse(JSON.stringify(PERSONAL)).map(p=>
+    (p.id in overridesBase) ? {...p, activo:overridesBase[p.id]} : p
+  );
+  return base.concat(nuevosVinculados);
 }
 function setPersonal(p){
-  // Solo guardar en localStorage los nuevos vinculados (id > 24)
-  // El personal base (id 1-24) siempre viene del código
+  // Nuevos vinculados (id > 24): se guardan completos
+  // Personal base (id 1-24): solo se guarda el estado "activo" (para permitir retiros
+  // sin perder ni sobrescribir sus datos maestros, que siempre vienen del código)
   const nuevos = p.filter(x=>x.id>24);
-  localStorage.setItem(LS_PERSONAL, JSON.stringify(nuevos));
+  const overridesBase = p.filter(x=>x.id<=24).map(x=>({id:x.id, activo:x.activo}));
+  localStorage.setItem(LS_PERSONAL, JSON.stringify(nuevos.concat(overridesBase)));
 }
 function getPendientes(){
   const s = localStorage.getItem(LS_PENDIENTES);
@@ -732,8 +739,9 @@ async function enviarAsistencia(){
     const personal=getPersonal();
     const histRetiros=getRetiros();
     retiros.forEach(f=>{
-      const idx=personal.findIndex(p=>p.nombre===f.nombre);
-      if(idx>=0){
+      const idx=personal.findIndex(p=>p.nombre===f.nombre&&p.activo);
+      const yaTieneRetiroPendiente=histRetiros.some(r=>r.nombre===f.nombre);
+      if(idx>=0&&!yaTieneRetiroPendiente){
         histRetiros.push({
           nombre:personal[idx].nombre,
           cargo:personal[idx].cargo,
@@ -946,7 +954,8 @@ async function guardarCorreccion(fecha){
     const tipo=NOVEDADES_TIPOS.find(n=>n.label===f.novedad);
     if(tipo?.retiro){
       const pIdx=personal.findIndex(p=>p.nombre===f.nombre&&p.activo);
-      if(pIdx>=0){
+      const yaTieneRetiroPendiente=histRetiros.some(r=>r.nombre===f.nombre);
+      if(pIdx>=0&&!yaTieneRetiroPendiente){
         histRetiros.push({
           nombre:personal[pIdx].nombre,
           cargo:personal[pIdx].cargo,
