@@ -455,6 +455,54 @@ async function fetchAsistenciaHist(forzar){
   return hist;
 }
 
+// ── HorasExtras: helpers de sincronización con Airtable ──
+function mapearHorasExtrasAT(rec){
+  const f = rec.fields || {};
+  let detalle=[], aprobObra={}, aprobProy={}, revObra={}, revProy={};
+  try{ detalle = JSON.parse(f.Detalle||"[]"); }catch(e){}
+  try{ aprobObra = JSON.parse(f.AprobadoObra||"{}"); }catch(e){}
+  try{ aprobProy = JSON.parse(f.AprobadoProy||"{}"); }catch(e){}
+  try{ revObra = JSON.parse(f.RevisionObra||"{}"); }catch(e){}
+  try{ revProy = JSON.parse(f.RevisionProy||"{}"); }catch(e){}
+  return {
+    id: parseInt(f.AppId,10) || Date.now(),
+    fecha: f.Fecha||"", tipo: f.Tipo||"", motivo: f.Motivo||"",
+    detalle, estado: f.Estado||"pendiente",
+    registradoPor: f.RegistradoPor||"",
+    aprobadoObra: !!aprobObra.aprobado, rechazadoObra: !!aprobObra.rechazado, motivoRechazoObra: aprobObra.motivoRechazo||"",
+    aprobadoProy: !!aprobProy.aprobado, rechazadoProy: !!aprobProy.rechazado, motivoRechazoProy: aprobProy.motivoRechazo||"",
+    revisionObra: revObra, revisionProy: revProy
+  };
+}
+let _heHistCache = null;
+async function fetchHorasExtrasAT(forzar){
+  if(_heHistCache && !forzar) return _heHistCache;
+  const data = await atProxyCall({accion:"leerHorasExtras"});
+  const hist = (data.registros||[]).map(mapearHorasExtrasAT);
+  _heHistCache = hist;
+  return hist;
+}
+// Sincroniza un solo registro hacia Airtable (best-effort, no bloquea la UI)
+async function heSincronizarUno(registro){
+  if(!getATProxyURL()) return;
+  try{ await atProxyCall({accion:"guardarHorasExtras", registro}); _heHistCache=null; }
+  catch(e){ alert("⚠️ No se pudo sincronizar con Airtable: "+e.message+"\nEl cambio quedó guardado localmente."); }
+}
+// Trae la versión más reciente desde Airtable y sobreescribe la copia local
+async function heSincronizarDesdeAirtable(){
+  if(!getATProxyURL()){ alert("Airtable no está conectado en este dispositivo todavía."); return; }
+  document.getElementById("overlayLoad").classList.add("vis");
+  try{
+    const hist = await fetchHorasExtrasAT(true);
+    setHorasExtras(hist);
+    document.getElementById("overlayLoad").classList.remove("vis");
+    irTab(tabActual);
+  }catch(e){
+    document.getElementById("overlayLoad").classList.remove("vis");
+    alert("⚠️ No se pudo sincronizar desde Airtable: "+e.message);
+  }
+}
+
 // ══════════════════════════════════════════════════
 // PIN
 // ══════════════════════════════════════════════════
@@ -703,6 +751,26 @@ function guardarATProxy(){
   if(!v?.startsWith("https://script.google.com")||!v.includes("/exec")){alert("URL inválida — debe ser la URL de la aplicación web (.../exec)");return;}
   setATProxyURL(v);
   irTab("asistencia");
+}
+function guardarATProxyHE(){
+  const v=document.getElementById("atProxyInputHE")?.value?.trim();
+  if(!v?.startsWith("https://script.google.com")||!v.includes("/exec")){alert("URL inválida — debe ser la URL de la aplicación web (.../exec)");return;}
+  setATProxyURL(v);
+  irTab(tabActual);
+}
+function heSyncBannerCon(){
+  return getATProxyURL() ? `
+    <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+      <span>📡 Conectado a Airtable</span>
+      <button class="btn btn-sm" onclick="heSincronizarDesdeAirtable()">🔄 Sincronizar ahora</button>
+    </div>` : `
+    <div class="alert alert-warn" style="margin-bottom:12px">
+      🔗 <div><strong>Airtable no conectado en este dispositivo</strong>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="atProxyInputHE" type="url" class="field-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:11px;font-family:monospace">
+        <button class="btn btn-sm btn-primary" onclick="guardarATProxyHE()">Guardar</button>
+      </div></div>
+    </div>`;
 }
 async function enviarAsistencia(){
   const activos=getPersonal().filter(p=>p.activo);
@@ -1332,6 +1400,7 @@ function renderHorasExtrasCon(){
   const totalValor = Object.values(heMap).reduce((s,v)=>s+v.valor,0);
 
   if(Object.keys(heMap).length===0) return `
+    ${heSyncBannerCon()}
     <div class="alert alert-info">⏱️ No hay horas extras aprobadas aún.</div>`;
 
   const filas = Object.entries(heMap).map(([nombre,v],i)=>`
@@ -1344,6 +1413,7 @@ function renderHorasExtrasCon(){
     </tr>`).join("");
 
   return `
+  ${heSyncBannerCon()}
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Trabajadores con HE</div><div class="stat-val azul">${Object.keys(heMap).length}</div></div>
     <div class="stat-box"><div class="stat-label">Total horas aprobadas</div><div class="stat-val">${totalHoras.toFixed(1)}h</div></div>
@@ -1768,8 +1838,21 @@ function renderHorasExtras(){
   const empty = pendientes.length===0&&aprobadas.length===0&&!esSSTouDir
     ? `<div class="empty">⏱️<br>No hay registros de horas extras aún.</div>` : "";
 
+  const syncBanner = getATProxyURL() ? `
+    <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>📡 Conectado a Airtable</span>
+      <button class="btn btn-sm" onclick="heSincronizarDesdeAirtable()">🔄 Sincronizar ahora</button>
+    </div>` : `
+    <div class="alert alert-warn">
+      🔗 <div><strong>Airtable no conectado en este dispositivo</strong> — Pegue la URL del proxy para ver y guardar horas extras en línea.
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="atProxyInputHE" type="url" class="field-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:11px;font-family:monospace">
+        <button class="btn btn-sm btn-primary" onclick="guardarATProxyHE()">Guardar</button>
+      </div></div>
+    </div>`;
+
   setTimeout(()=>heRenderLista(), 50);
-  return formRegistro + seguimientoSST + (pendientes.length===0&&!esAprobador&&!esFinanzas?"":pendCard) + historial + empty;
+  return syncBanner + formRegistro + seguimientoSST + (pendientes.length===0&&!esAprobador&&!esFinanzas?"":pendCard) + historial + empty;
 }
 
 function heRenderLista(){
@@ -1888,17 +1971,19 @@ function heEnviar(){
   }
   if(detalle.length===0){alert("No hay trabajadores con horas extras para registrar.");return;}
   const todos=getHorasExtras();
-  todos.push({
+  const nuevoReg={
     id:Date.now(), fecha:heEstado.fecha, tipo, motivo,
     detalle, registradoPor:rolActual.nombre+" (SST)",
     aprobadoObra:false, aprobadoProy:false, estado:"pendiente",
     revisionObra:{}, revisionProy:{}
-  });
+  };
+  todos.push(nuevoReg);
   setHorasExtras(todos);
+  heSincronizarUno(nuevoReg);
   heEstado={fecha:"",tipo:"semana",horaInicio:"",horaFin:"",trabajadores:{}};
-  const fechaReg=todos[todos.length-1].fecha;
+  const fechaReg=nuevoReg.fecha;
   mostrarOk("¡Horas extras enviadas!",
-    "El Director de Obra y el Director de Proyecto deben aprobar el registro.",
+    "El Director de Obra y el Director de Proyecto deben aprobar el registro."+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo, quedó solo local."),
     '<div class="ok-row"><span class="l">Fecha</span><span>'+fechaReg+'</span></div>'+
     '<div class="ok-row"><span class="l">Trabajadores</span><span>'+detalle.length+'</span></div>'+
     '<div class="ok-row"><span class="l">Motivo</span><span style="font-size:10px;text-align:right;max-width:160px">'+motivo+'</span></div>');
@@ -1990,6 +2075,7 @@ function heConfirmarRevision(id){
   }
 
   setHorasExtras(todos);
+  heSincronizarUno(reg);
   const aprobados =reg.detalle.filter(d=>d.estadoAprobacion==='aprobado').length;
   const noAprobados=reg.detalle.filter(d=>d.estadoAprobacion==='no_aprobado').length;
   const pendOtro  =reg.detalle.filter(d=>d.estadoAprobacion==='pendiente_otro_director').length;
@@ -2011,6 +2097,7 @@ function heAprobarObra(id){
   reg.motivoRechazoObra="";
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
+  heSincronizarUno(reg);
   irTab("horas_extras");
 }
 function heAprobarProy(id){
@@ -2022,6 +2109,7 @@ function heAprobarProy(id){
   reg.motivoRechazoProy="";
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
+  heSincronizarUno(reg);
   irTab("horas_extras");
 }
 
@@ -2038,6 +2126,7 @@ function heRechazarObra(id){
   reg.motivoRechazoObra=motivo.trim();
   reg.estado="rechazado_parcial";
   setHorasExtras(todos);
+  heSincronizarUno(reg);
   irTab("horas_extras");
 }
 function heRechazarProy(id){
@@ -2052,6 +2141,7 @@ function heRechazarProy(id){
   reg.motivoRechazoProy=motivo.trim();
   reg.estado="rechazado_parcial";
   setHorasExtras(todos);
+  heSincronizarUno(reg);
   irTab("horas_extras");
 }
 
@@ -2059,7 +2149,8 @@ function heRechazarProy(id){
 function heAprobarSemanaObra(){
   if(!confirm("¿Aprobar todos los registros pendientes de la semana como Raúl Echeverri?")) return;
   const todos=getHorasExtras();
-  todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial").forEach(h=>{
+  const afectados=todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
+  afectados.forEach(h=>{
     h.aprobadoObra=true;
     h.rechazadoObra=false;
     h.motivoRechazoObra="";
@@ -2067,12 +2158,14 @@ function heAprobarSemanaObra(){
     else h.estado="pendiente";
   });
   setHorasExtras(todos);
+  afectados.forEach(h=>heSincronizarUno(h));
   irTab("horas_extras");
 }
 function heAprobarSemanaProy(){
   if(!confirm("¿Aprobar todos los registros pendientes de la semana como Andrés Chaves?")) return;
   const todos=getHorasExtras();
-  todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial").forEach(h=>{
+  const afectados=todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
+  afectados.forEach(h=>{
     h.aprobadoProy=true;
     h.rechazadoProy=false;
     h.motivoRechazoProy="";
@@ -2080,12 +2173,18 @@ function heAprobarSemanaProy(){
     else h.estado="pendiente";
   });
   setHorasExtras(todos);
+  afectados.forEach(h=>heSincronizarUno(h));
   irTab("horas_extras");
 }
 
 function heRechazar(id){
   if(!confirm("¿Eliminar completamente este registro?")) return;
   setHorasExtras(getHorasExtras().filter(h=>h.id!==id));
+  if(getATProxyURL()){
+    atProxyCall({accion:"eliminarHorasExtras", appId:String(id)}).catch(e=>{
+      alert("⚠️ Se eliminó localmente, pero no se pudo eliminar en Airtable: "+e.message);
+    });
+  }
   irTab("horas_extras");
 }
 
