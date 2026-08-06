@@ -361,6 +361,7 @@ const LS_RETIROS    = "nom_retiros";
 const LS_PERSONAL   = "nom_personal";
 const LS_PENDIENTES = "nom_pendientes";
 const LS_URL        = "nom_script_url";
+const LS_AT_PROXY    = "nom_at_proxy_url"; // URL del proxy de Apps Script hacia Airtable
 const LS_ASISTENCIA = "nom_asistencia_hist"; // historial de asistencia
 
 let rolActual  = null;
@@ -403,6 +404,49 @@ function getPendientes(){
 }
 function setPendientes(p){ localStorage.setItem(LS_PENDIENTES, JSON.stringify(p)); }
 function getURL(){ return localStorage.getItem(LS_URL)||""; }
+function getATProxyURL(){ return localStorage.getItem(LS_AT_PROXY)||""; }
+function setATProxyURL(v){ localStorage.setItem(LS_AT_PROXY,v); }
+
+// ── Llamada genérica al proxy de Airtable ──
+async function atProxyCall(payload){
+  const url = getATProxyURL();
+  if(!url) throw new Error("Falta configurar la URL del proxy de Airtable.");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita preflight CORS
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || "Error desconocido del proxy.");
+  return data;
+}
+function mapearRegistroAT(rec){
+  const f = rec.fields || {};
+  let filas = [], correcciones = [];
+  try{ filas = JSON.parse(f.Datos || "[]"); }catch(e){}
+  try{ correcciones = JSON.parse(f.Correcciones || "[]"); }catch(e){}
+  return {
+    fecha: f.Fecha || "",
+    filas,
+    registradoPor: f.Registradopor || "",
+    registradoEn: rec.createdTime ? new Date(rec.createdTime).toLocaleString("es-CO") : "",
+    correcciones,
+    _airtableId: rec.id
+  };
+}
+let _asisHistCache = null;
+async function fetchAsistenciaHist(forzar){
+  if(_asisHistCache && !forzar) return _asisHistCache;
+  const data = await atProxyCall({accion:"leerAsistencia"});
+  const hist = (data.registros||[]).map(mapearRegistroAT);
+  hist.sort((a,b)=>{
+    const da=a.fecha.split("/").reverse().join("-");
+    const db=b.fecha.split("/").reverse().join("-");
+    return new Date(da) - new Date(db);
+  });
+  _asisHistCache = hist;
+  return hist;
+}
 
 // ══════════════════════════════════════════════════
 // PIN
@@ -567,9 +611,19 @@ function renderAsistencia(){
       </div></div>
     </div>` : "";
 
+  const atBanner = !getATProxyURL() ? `
+    <div class="alert alert-warn">
+      🔗 <div><strong>Airtable no conectado en este dispositivo</strong> — Pegue la URL del proxy para que la asistencia quede en línea (Airtable), no solo en este navegador.
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="atProxyInput" type="url" class="field-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:11px;font-family:monospace">
+        <button class="btn btn-sm btn-primary" onclick="guardarATProxy()">Guardar</button>
+      </div></div>
+    </div>` : "";
+
   const fechaSelActual = fechaAsisSel || getFechaISO();
   return `
   ${urlBanner}
+  ${atBanner}
   <div class="field-group">
     <label class="field-label">📅 Fecha del registro${fechaAsisSel?' (retroactivo)':''}</label>
     <input type="date" class="field-input" id="fechaAsisInput" value="${dmyToIso(fechaSelActual)}"
@@ -586,7 +640,7 @@ function renderAsistencia(){
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Personal activo en obra</div>
   <div id="listaTrab">${tarjetas}</div>
   <button class="btn btn-primary btn-block mt8" onclick="enviarAsistencia()">📤 Registrar asistencia del día</button>
-  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="document.getElementById('mainContent').innerHTML=renderCorreccionAsis()">✏️ Corregir registro anterior</button>`;
+  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="abrirHistorialCorreccion()">✏️ Corregir registro anterior</button>`;
 }
 
 function toggleAsis(id){
@@ -635,6 +689,12 @@ function guardarURL(){
   const v=document.getElementById("urlInput")?.value?.trim();
   if(!v?.startsWith("https://script.google.com")){alert("URL inválida");return;}
   localStorage.setItem(LS_URL,v);
+  irTab("asistencia");
+}
+function guardarATProxy(){
+  const v=document.getElementById("atProxyInput")?.value?.trim();
+  if(!v?.startsWith("https://script.google.com")||!v.includes("/exec")){alert("URL inválida — debe ser la URL de la aplicación web (.../exec)");return;}
+  setATProxyURL(v);
   irTab("asistencia");
 }
 async function enviarAsistencia(){
@@ -690,9 +750,8 @@ async function enviarAsistencia(){
     setPersonal(personal);
     setRetiros(histRetiros);
   }
-  // Guardar en historial de asistencia
+  // Guardar en historial de asistencia (respaldo local)
   const hist=getAsistenciaHist();
-  // Remover si ya existe registro del mismo día (para permitir corrección)
   const idx=hist.findIndex(h=>h.fecha===fecha);
   const registro={
     fecha, filas,
@@ -704,7 +763,23 @@ async function enviarAsistencia(){
   else hist.push(registro);
   setAsistenciaHist(hist);
 
-  mostrarOk("¡Asistencia registrada!","Los datos fueron enviados a Google Sheets.",
+  // Guardar en Airtable a través del proxy (fuente de verdad en línea)
+  let mensajeAT="";
+  if(getATProxyURL()){
+    document.getElementById("overlayLoad").classList.add("vis");
+    try{
+      await atProxyCall({accion:"guardarAsistencia", registro});
+      _asisHistCache=null; // invalidar caché para que refleje lo nuevo
+      mensajeAT="Los datos quedaron guardados en Airtable (en línea).";
+    }catch(e){
+      mensajeAT="⚠️ No se pudo sincronizar con Airtable ("+e.message+"). Quedó guardado localmente, intente de nuevo o use el script de exportación manual.";
+    }
+    document.getElementById("overlayLoad").classList.remove("vis");
+  } else {
+    mensajeAT="⚠️ Airtable no está conectado en este dispositivo — quedó guardado solo localmente.";
+  }
+
+  mostrarOk("¡Asistencia registrada!",mensajeAT,
     `<div class="ok-row"><span class="l">Fecha</span><span>${fecha}</span></div>
      <div class="ok-row"><span class="l">Presentes</span><span>${pres} personas</span></div>
      <div class="ok-row"><span class="l">Ausentes</span><span>${aus} personas</span></div>
@@ -716,14 +791,31 @@ async function enviarAsistencia(){
 // ══════════════════════════════════════════════════
 // CORRECCIÓN DE ASISTENCIA
 // ══════════════════════════════════════════════════
-function renderCorreccionAsis(){
-  const hist=getAsistenciaHist();
-  if(hist.length===0) return `<div class="empty">📋 No hay registros de asistencia aún.</div>`;
+async function abrirHistorialCorreccion(){
+  const c=document.getElementById("mainContent");
+  if(!getATProxyURL()){
+    _histActualCorreccion = getAsistenciaHist();
+    c.innerHTML = renderCorreccionAsis(_histActualCorreccion, false);
+    return;
+  }
+  c.innerHTML = `<div class="card"><div class="card-title">✏️ Historial y corrección de asistencia</div><div class="empty">⏳ Cargando desde Airtable...</div></div>`;
+  try{
+    _histActualCorreccion = await fetchAsistenciaHist(true);
+    c.innerHTML = renderCorreccionAsis(_histActualCorreccion, true);
+  }catch(e){
+    c.innerHTML = `<div class="card"><div class="alert alert-warn">⚠️ No se pudo conectar con Airtable: ${e.message}</div>
+      <button class="btn" onclick="irTab('asistencia')">Volver</button></div>`;
+  }
+}
+let _histActualCorreccion = [];
+
+function renderCorreccionAsis(hist, desdeAirtable){
+  if(!hist || hist.length===0) return `<div class="empty">📋 No hay registros de asistencia aún.</div>`;
 
   return `
   <div class="card">
     <div class="card-title">✏️ Historial y corrección de asistencia</div>
-    <div class="alert alert-warn">Seleccione un día para ver o corregir el registro. Toda corrección queda con log de quién la hizo y cuándo.</div>
+    <div class="alert alert-warn">${desdeAirtable?'📡 Datos en línea desde Airtable. ':'⚠️ Mostrando copia local de este dispositivo (Airtable no conectado). '}Seleccione un día para ver o corregir el registro. Toda corrección queda con log de quién la hizo y cuándo.</div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Fecha</th><th>Presentes</th><th>Ausentes</th><th>Registrado por</th><th>Correcciones</th><th></th></tr></thead>
@@ -743,7 +835,7 @@ function renderCorreccionAsis(){
 }
 
 function abrirCorreccion(fecha){
-  const hist=getAsistenciaHist();
+  const hist=_histActualCorreccion;
   const reg=hist.find(h=>h.fecha===fecha);
   if(!reg){alert("Registro no encontrado.");return;}
 
@@ -810,24 +902,43 @@ function corNovedad(nombre,val,idSafe){
   if(warn) warn.style.display=esRetiro?'block':'none';
 }
 
-function guardarCorreccion(fecha){
+async function guardarCorreccion(fecha){
   const motivo=document.getElementById("cor-motivo")?.value?.trim();
   if(!motivo){alert("Indique el motivo de la corrección.");return;}
-  const hist=getAsistenciaHist();
-  const idx=hist.findIndex(h=>h.fecha===fecha);
-  if(idx<0){alert("Registro no encontrado.");return;}
-  if(!hist[idx].correcciones) hist[idx].correcciones=[];
-  hist[idx].correcciones.push({
+  const filasNuevas=JSON.parse(JSON.stringify(window._corBuffer));
+  const correccion={
     por:rolActual.nombre+" ("+rolActual.rol+")",
     en:new Date().toLocaleString("es-CO"),
-    motivo,
-    antes:hist[idx].filas
-  });
-  const filasNuevas=JSON.parse(JSON.stringify(window._corBuffer));
-  hist[idx].filas=filasNuevas;
-  setAsistenciaHist(hist);
+    motivo
+  };
 
-  // Procesar retiros marcados en esta corrección (renuncia/despido/fin de obra)
+  // Respaldo local
+  const hist=getAsistenciaHist();
+  const idx=hist.findIndex(h=>h.fecha===fecha);
+  if(idx>=0){
+    if(!hist[idx].correcciones) hist[idx].correcciones=[];
+    hist[idx].correcciones.push({...correccion, antes:hist[idx].filas});
+    hist[idx].filas=filasNuevas;
+    setAsistenciaHist(hist);
+  }
+
+  // Guardar en Airtable a través del proxy
+  let mensajeAT="";
+  if(getATProxyURL()){
+    document.getElementById("overlayLoad").classList.add("vis");
+    try{
+      await atProxyCall({accion:"guardarCorreccion", fecha, filas:filasNuevas, correccion});
+      _asisHistCache=null;
+      mensajeAT="Corrección guardada en Airtable (en línea).";
+    }catch(e){
+      mensajeAT="⚠️ No se pudo sincronizar la corrección con Airtable ("+e.message+"). Quedó guardada localmente.";
+    }
+    document.getElementById("overlayLoad").classList.remove("vis");
+  } else {
+    mensajeAT="⚠️ Airtable no está conectado en este dispositivo — quedó guardada solo localmente.";
+  }
+
+  // Procesar retiros marcados en esta corrección (renuncia/despido/fin de obra) — local
   const personal=getPersonal();
   const histRetiros=getRetiros();
   let huboRetiro=false;
@@ -853,7 +964,7 @@ function guardarCorreccion(fecha){
   });
   if(huboRetiro){ setPersonal(personal); setRetiros(histRetiros); }
 
-  mostrarOk("✅ Corrección guardada",`El registro del ${fecha} fue actualizado.`+(huboRetiro?" El trabajador quedó desactivado del sistema y Finanzas debe ser notificado.":""),
+  mostrarOk("✅ Corrección guardada",mensajeAT+(huboRetiro?" El trabajador quedó desactivado del sistema y Finanzas debe ser notificado.":""),
     `<div class="ok-row"><span class="l">Motivo</span><span>${motivo}</span></div>
      <div class="ok-row"><span class="l">Corregido por</span><span>${rolActual.nombre}</span></div>`);
 }
