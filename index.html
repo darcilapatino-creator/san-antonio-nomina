@@ -502,6 +502,19 @@ async function heSincronizarDesdeAirtable(){
     alert("⚠️ No se pudo sincronizar desde Airtable: "+e.message);
   }
 }
+// Igual que arriba, pero silenciosa (sin overlay ni alertas) — se dispara sola
+// cada vez que alguien abre la pestaña de Horas Extras, para que se sienta automático
+let _heAutoSyncEnCurso=false;
+async function heAutoSync(){
+  if(!getATProxyURL()||_heAutoSyncEnCurso) return;
+  _heAutoSyncEnCurso=true;
+  try{
+    const hist = await fetchHorasExtrasAT(true);
+    setHorasExtras(hist);
+    if(tabActual==="horas_extras"||tabActual==="horas_extras_con") irTab(tabActual);
+  }catch(e){ /* silencioso: si falla, se queda con la última copia local conocida */ }
+  _heAutoSyncEnCurso=false;
+}
 
 // ══════════════════════════════════════════════════
 // PIN
@@ -594,8 +607,8 @@ function irTab(id){
   if(id==="asistencia")           c.innerHTML=renderAsistencia();
   else if(id==="asistencia_ro")   c.innerHTML=renderAsistenciaRO();
   else if(id==="vinculacion")     c.innerHTML=renderVinculacion();
-  else if(id==="horas_extras")    c.innerHTML=renderHorasExtras();
-  else if(id==="horas_extras_con")c.innerHTML=renderHorasExtrasCon();
+  else if(id==="horas_extras")    { c.innerHTML=renderHorasExtras(); heAutoSync(); }
+  else if(id==="horas_extras_con"){ c.innerHTML=renderHorasExtrasCon(); heAutoSync(); }
   else if(id==="resumen")         c.innerHTML=renderResumen();
   else if(id==="nomina")          c.innerHTML=renderNomina();
   else if(id==="personal_con")    c.innerHTML=renderPersonalCon();
