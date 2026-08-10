@@ -1876,9 +1876,9 @@ function renderHorasExtras(){
     pendientes.concat(getHorasExtras().filter(h=>h.estado==="rechazado_parcial")).map(reg=>heRenderCard(reg)).join("")
     : "";
 
-  // Vista de seguimiento para SST — ve sus registros con estado resumido
-  const todosHE = getHorasExtras();
-  const seguimientoSST = rolActual.rol==="SST" && todosHE.length>0 ? `
+  // Vista de seguimiento — SST ve sus registros, Finanzas ve un resumen sin editar ni montos
+  const todosHE = getHorasExtras().slice().sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const seguimientoSST = (rolActual.rol==="SST"||esFinanzas) && todosHE.length>0 ? `
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">
     📋 Seguimiento de registros enviados (${todosHE.length})
   </div>
@@ -1886,7 +1886,7 @@ function renderHorasExtras(){
     <table>
       <thead><tr>
         <th>Fecha</th><th>Tipo</th><th>Trabajadores</th><th>Total horas</th>
-        <th>Dir. Obra</th><th>Dir. Proyecto</th><th>Estado</th><th></th>
+        <th>Dir. Obra</th><th>Dir. Proyecto</th><th>Estado</th>${rolActual.rol==="SST"?"<th></th>":""}
       </tr></thead>
       <tbody>${todosHE.map(reg=>{
         const tipoLabel=reg.tipo==="semana"?"Entre semana":reg.tipo==="sabado"?"Sábado":"Dom/Festivo";
@@ -1911,9 +1911,9 @@ function renderHorasExtras(){
           :reg.estado==='rechazado_parcial'
           ?'<span class="badge b-aus">⚠️ Con obs.</span>'
           :'<span class="badge b-pend" style="background:#f1f5f9;color:#64748b">⏳ En revisión</span>';
-        const btnEditar=reg.estado!=='aprobado'
-          ?'<button class="btn btn-sm" onclick="heEditar('+reg.id+')">✏️ Editar</button>':
-          '<button class="btn btn-sm" disabled style="opacity:.4">✏️ Editar</button>';
+        const btnEditar=rolActual.rol!=="SST" ? "" : (reg.estado!=='aprobado'
+          ?'<td><button class="btn btn-sm" onclick="heEditar('+reg.id+')">✏️ Editar</button></td>':
+          '<td><button class="btn btn-sm" disabled style="opacity:.4">✏️ Editar</button></td>');
         return `<tr>
           <td><strong>${reg.fecha}</strong></td>
           <td>${tipoLabel}</td>
@@ -1922,7 +1922,7 @@ function renderHorasExtras(){
           <td style="text-align:center">${chipObra}</td>
           <td style="text-align:center">${chipProy}</td>
           <td style="text-align:center">${estadoBadge}</td>
-          <td>${btnEditar}</td>
+          ${btnEditar}
         </tr>`;
       }).join("")}
       </tbody>
