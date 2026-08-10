@@ -516,6 +516,101 @@ async function heAutoSync(){
   _heAutoSyncEnCurso=false;
 }
 
+// ── Vinculación: helpers de sincronización con Airtable ──
+function mapearVinculacionAT(rec){
+  const f = rec.fields || {};
+  let datos={};
+  try{ datos = JSON.parse(f.Datos||"{}"); }catch(e){}
+  return {
+    id: parseInt(f.AppId,10) || Date.now(),
+    nombre: f.Nombre||"",
+    cedula: datos.cedula||"", cargo: datos.cargo||"",
+    salario: datos.salario||0, fechaIngreso: datos.fechaIngreso||"",
+    examenes: datos.examenes||"",
+    aprobadoObra: !!datos.aprobadoObra, aprobadoProy: !!datos.aprobadoProy,
+    solicitadoPor: datos.solicitadoPor||"",
+    fechaSolicitud: f.FechaSolicitud||""
+  };
+}
+let _vincHistCache = null;
+async function fetchVinculacionAT(forzar){
+  if(_vincHistCache && !forzar) return _vincHistCache;
+  const data = await atProxyCall({accion:"leerVinculacion"});
+  const hist = (data.registros||[]).map(mapearVinculacionAT);
+  _vincHistCache = hist;
+  return hist;
+}
+function vincEtapaTexto(emp){
+  if(emp.aprobadoObra&&emp.aprobadoProy) return "Activado";
+  if(emp.aprobadoObra) return "Pendiente Dir. Proyecto";
+  if(emp.aprobadoProy) return "Pendiente Dir. Obra";
+  return "Pendiente ambos directores";
+}
+async function vincSincronizarUno(emp){
+  if(!getATProxyURL()) return;
+  try{
+    await atProxyCall({accion:"guardarVinculacion", registro:{
+      id: emp.id, nombre: emp.nombre, etapa: vincEtapaTexto(emp),
+      cedula: emp.cedula, cargo: emp.cargo, salario: emp.salario,
+      fechaIngreso: emp.fechaIngreso, examenes: emp.examenes,
+      aprobadoObra: emp.aprobadoObra, aprobadoProy: emp.aprobadoProy,
+      solicitadoPor: emp.solicitadoPor||"",
+      aprobadoPor: [emp.aprobadoObra?"Raúl Echeverri":"", emp.aprobadoProy?"Andrés Chaves":""].filter(Boolean).join(", "),
+      fechaSolicitud: emp.fechaSolicitud||emp.fechaIngreso||""
+    }});
+    _vincHistCache=null;
+  }catch(e){ alert("⚠️ No se pudo sincronizar con Airtable: "+e.message+"\nEl cambio quedó guardado localmente."); }
+}
+async function vincEliminarUno(id){
+  if(!getATProxyURL()) return;
+  try{ await atProxyCall({accion:"eliminarVinculacion", appId:id}); _vincHistCache=null; }
+  catch(e){ alert("⚠️ No se pudo eliminar en Airtable: "+e.message); }
+}
+async function vincSincronizarDesdeAirtable(){
+  if(!getATProxyURL()){ alert("Airtable no está conectado en este dispositivo todavía."); return; }
+  document.getElementById("overlayLoad").classList.add("vis");
+  try{
+    const hist = await fetchVinculacionAT(true);
+    setPendientes(hist);
+    document.getElementById("overlayLoad").classList.remove("vis");
+    irTab(tabActual);
+  }catch(e){
+    document.getElementById("overlayLoad").classList.remove("vis");
+    alert("⚠️ No se pudo sincronizar desde Airtable: "+e.message);
+  }
+}
+let _vincAutoSyncEnCurso=false;
+async function vincAutoSync(){
+  if(!getATProxyURL()||_vincAutoSyncEnCurso) return;
+  _vincAutoSyncEnCurso=true;
+  try{
+    const hist = await fetchVinculacionAT(true);
+    setPendientes(hist);
+    if(tabActual==="vinculacion") irTab(tabActual);
+  }catch(e){ /* silencioso */ }
+  _vincAutoSyncEnCurso=false;
+}
+function vincSyncBanner(){
+  return getATProxyURL() ? `
+    <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>📡 Conectado a Airtable</span>
+      <button class="btn btn-sm" onclick="vincSincronizarDesdeAirtable()">🔄 Sincronizar ahora</button>
+    </div>` : `
+    <div class="alert alert-warn">
+      🔗 <div><strong>Airtable no conectado en este dispositivo</strong> — Pegue la URL del proxy para ver y guardar vinculación en línea.
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="atProxyInputVinc" type="url" class="field-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size:11px;font-family:monospace">
+        <button class="btn btn-sm btn-primary" onclick="guardarATProxyVinc()">Guardar</button>
+      </div></div>
+    </div>`;
+}
+function guardarATProxyVinc(){
+  const v=document.getElementById("atProxyInputVinc")?.value?.trim();
+  if(!v?.startsWith("https://script.google.com")||!v.includes("/exec")){alert("URL inválida — debe ser la URL de la aplicación web (.../exec)");return;}
+  setATProxyURL(v);
+  irTab("vinculacion");
+}
+
 // ══════════════════════════════════════════════════
 // PIN
 // ══════════════════════════════════════════════════
@@ -606,7 +701,7 @@ function irTab(id){
   const c=document.getElementById("mainContent");
   if(id==="asistencia")           c.innerHTML=renderAsistencia();
   else if(id==="asistencia_ro")   c.innerHTML=renderAsistenciaRO();
-  else if(id==="vinculacion")     c.innerHTML=renderVinculacion();
+  else if(id==="vinculacion")     { c.innerHTML=renderVinculacion(); vincAutoSync(); }
   else if(id==="horas_extras")    { c.innerHTML=renderHorasExtras(); heAutoSync(); }
   else if(id==="horas_extras_con"){ c.innerHTML=renderHorasExtrasCon(); heAutoSync(); }
   else if(id==="resumen")         c.innerHTML=renderResumen();
@@ -1191,7 +1286,7 @@ function renderVinculacion(){
     </tbody></table>
   </div>`:""}  `;
 
-  return formNuevo + pendCards + activosSection;
+  return vincSyncBanner() + formNuevo + pendCards + activosSection;
 }
 
 function solicitarIngreso(){
@@ -1203,10 +1298,13 @@ function solicitarIngreso(){
   const exams=document.getElementById("nv-examenes")?.value;
   if(!nombre||!cedula||!cargo||!salario||!fecha||!exams){alert("Complete todos los campos.");return;}
   const pend=getPendientes();
-  pend.push({id:Date.now(),nombre,cedula,cargo,salario:parseInt(salario),fechaIngreso:fecha,
-    examenes:exams,solicitadoPor:rolActual.nombre+" (SST)",aprobadoObra:false,aprobadoProy:false});
+  const nuevo={id:Date.now(),nombre,cedula,cargo,salario:parseInt(salario),fechaIngreso:fecha,
+    examenes:exams,solicitadoPor:rolActual.nombre+" (SST)",aprobadoObra:false,aprobadoProy:false,
+    fechaSolicitud:new Date().toISOString().slice(0,10)};
+  pend.push(nuevo);
   setPendientes(pend);
-  mostrarOk("¡Solicitud enviada!",`Se notificará a Raúl Echeverri y Andrés Chaves para su aprobación.`,
+  vincSincronizarUno(nuevo);
+  mostrarOk("¡Solicitud enviada!",`Se notificará a Raúl Echeverri y Andrés Chaves para su aprobación.`+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo."),
     `<div class="ok-row"><span class="l">Trabajador</span><span>${nombre}</span></div>
      <div class="ok-row"><span class="l">Cargo</span><span>${cargo}</span></div>`);
 }
@@ -1217,6 +1315,7 @@ function aprobarObra(id){
   if(!emp)return;
   emp.aprobadoObra=true;
   setPendientes(pend);
+  vincSincronizarUno(emp);
   verificarActivacion(id);
   irTab("vinculacion");
 }
@@ -1226,12 +1325,14 @@ function aprobarProy(id){
   if(!emp)return;
   emp.aprobadoProy=true;
   setPendientes(pend);
+  vincSincronizarUno(emp);
   verificarActivacion(id);
   irTab("vinculacion");
 }
 function rechazar(id){
   if(!confirm("¿Rechazar esta solicitud?"))return;
   setPendientes(getPendientes().filter(p=>p.id!==id));
+  vincEliminarUno(id);
   irTab("vinculacion");
 }
 function verificarActivacion(id){
@@ -1244,6 +1345,7 @@ function verificarActivacion(id){
     eps:"—",pension:"—",arl:"Positiva",ccf:"Comfaboy",activo:true});
   setPersonal(personal);
   setPendientes(pend.filter(p=>p.id!==id));
+  vincEliminarUno(id);
   estadoAsis[emp.id]={presente:null,novedad:null,obs:""};
   alert(`🎉 ${emp.nombre} activado en el sistema de nómina.`);
 }
@@ -1703,7 +1805,8 @@ function renderHorasExtras(){
   const esAprobador=["Director de Obra","Director de Proyecto"].includes(rolActual.rol);
   const esFinanzas=["Finanzas","CONSTRUCTHOR"].includes(rolActual.rol);
 
-  const pendientes=getHorasExtras().filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
+  const pendientes=getHorasExtras().filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial")
+    .sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
   const aprobadas=getHorasExtras().filter(h=>h.estado==="aprobado"||h.estado==="aprobado_parcial");
 
   // Formulario de registro (SST)
