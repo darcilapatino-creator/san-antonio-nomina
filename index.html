@@ -1879,7 +1879,7 @@ function heRenderLista(){
     const hIni=est.horaInicio||horaIni;
     const hFin=est.horaFin||horaFin;
     let preview="";
-    if(hIni&&hFin){
+    if(hIni&&hFin&&rolActual.rol==="Finanzas"){
       const tipo=document.getElementById("he-tipo")?.value||"semana";
       const r=calcularRecargo(tipo,horaADecimal(hIni),horaADecimal(hFin));
       if(r.horas>0){
