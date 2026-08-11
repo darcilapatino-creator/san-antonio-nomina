@@ -555,7 +555,7 @@ async function vincSincronizarUno(emp){
       fechaIngreso: emp.fechaIngreso, examenes: emp.examenes,
       aprobadoObra: emp.aprobadoObra, aprobadoProy: emp.aprobadoProy,
       solicitadoPor: emp.solicitadoPor||"",
-      aprobadoPor: [emp.aprobadoObra?"Raúl Echeverri":"", emp.aprobadoProy?"Andrés Chaves":""].filter(Boolean).join(", "),
+      aprobadoPor: [emp.aprobadoObra?"Director de Obra":"", emp.aprobadoProy?"Director de Proyecto":""].filter(Boolean).join(", "),
       fechaSolicitud: emp.fechaSolicitud||emp.fechaIngreso||""
     }});
     _vincHistCache=null;
@@ -1222,17 +1222,17 @@ function renderVinculacion(){
   const pendCards = pend.length===0 ? "" : `
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">⏳ Pendientes de aprobación (${pend.length})</div>
   ${pend.map(emp=>{
-    const chipObra=`<div class="chip ${emp.aprobadoObra?'chip-ok':'chip-pend'}">${emp.aprobadoObra?"✅ Raúl Echeverri":"⏳ Raúl Echeverri"}</div>`;
-    const chipProy=`<div class="chip ${emp.aprobadoProy?'chip-ok':'chip-pend'}">${emp.aprobadoProy?"✅ Andrés Chaves":"⏳ Andrés Chaves"}</div>`;
+    const chipObra=`<div class="chip ${emp.aprobadoObra?'chip-ok':'chip-pend'}">${emp.aprobadoObra?"✅ Director de Obra":"⏳ Director de Obra"}</div>`;
+    const chipProy=`<div class="chip ${emp.aprobadoProy?'chip-ok':'chip-pend'}">${emp.aprobadoProy?"✅ Director de Proyecto":"⏳ Director de Proyecto"}</div>`;
     const btnObra=emp.aprobadoObra
-      ? `<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Raúl Echeverri aprobó</button>`
+      ? `<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Director de Obra aprobó</button>`
       : (rolActual.rol==="Director de Obra"||rolActual.rol==="Director de Proyecto"
-          ? `<button class="btn-aprov btn-aprov-obra" onclick="aprobarObra(${emp.id})">👷 Aprobar — Raúl Echeverri</button>`
+          ? `<button class="btn-aprov btn-aprov-obra" onclick="aprobarObra(${emp.id})">👷 Aprobar — Director de Obra</button>`
           : `<button class="btn-aprov btn-aprov-obra" disabled style="opacity:.5">⏳ Pendiente Dir. Obra</button>`);
     const btnProy=emp.aprobadoProy
-      ? `<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Andrés Chaves aprobó</button>`
+      ? `<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Director de Proyecto aprobó</button>`
       : (rolActual.rol==="Director de Proyecto"
-          ? `<button class="btn-aprov btn-aprov-proy" onclick="aprobarProy(${emp.id})">💼 Aprobar — Andrés Chaves</button>`
+          ? `<button class="btn-aprov btn-aprov-proy" onclick="aprobarProy(${emp.id})">💼 Aprobar — Director de Proyecto</button>`
           : `<button class="btn-aprov btn-aprov-proy" disabled style="opacity:.5">⏳ Pendiente Dir. Proyecto</button>`);
     const btnRech=esSSTouDir
       ? `<button class="btn-aprov btn-rechazar" onclick="rechazar(${emp.id})">✖ Rechazar solicitud</button>` : "";
@@ -1304,7 +1304,7 @@ function solicitarIngreso(){
   pend.push(nuevo);
   setPendientes(pend);
   vincSincronizarUno(nuevo);
-  mostrarOk("¡Solicitud enviada!",`Se notificará a Raúl Echeverri y Andrés Chaves para su aprobación.`+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo."),
+  mostrarOk("¡Solicitud enviada!",`Se notificará al Director de Obra y al Director de Proyecto para su aprobación.`+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo."),
     `<div class="ok-row"><span class="l">Trabajador</span><span>${nombre}</span></div>
      <div class="ok-row"><span class="l">Cargo</span><span>${cargo}</span></div>`);
 }
@@ -1865,8 +1865,8 @@ function renderHorasExtras(){
     <div class="card-title" style="color:#856404">📅 Aprobación semanal — ${pendientes.length} registro(s) pendiente(s)</div>
     <p style="font-size:12px;color:#92400e;margin-bottom:12px">Apruebe todos los registros de la semana de una sola vez. Recomendado los <strong>lunes</strong>.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${rolActual.rol==="Director de Obra"?`<button class="btn btn-success" onclick="heAprobarSemanaObra()">👷 Aprobar semana completa — Raúl Echeverri</button>`:""}
-      ${rolActual.rol==="Director de Proyecto"?`<button class="btn btn-primary" onclick="heAprobarSemanaProy()">💼 Aprobar semana completa — Andrés Chaves</button>`:""}
+      ${rolActual.rol==="Director de Obra"?`<button class="btn btn-success" onclick="heAprobarSemanaObra()">👷 Aprobar semana completa — Director de Obra</button>`:""}
+      ${rolActual.rol==="Director de Proyecto"?`<button class="btn btn-primary" onclick="heAprobarSemanaProy()">💼 Aprobar semana completa — Director de Proyecto</button>`:""}
     </div>
   </div>` : "";
 
@@ -2231,7 +2231,7 @@ function heAprobarProy(id){
 
 // Rechazo con motivo
 function heRechazarObra(id){
-  const motivo=prompt("Motivo del rechazo (Raúl Echeverri):");
+  const motivo=prompt("Motivo del rechazo (Director de Obra):");
   if(motivo===null) return;
   if(!motivo.trim()){alert("Debe escribir un motivo.");return;}
   const todos=getHorasExtras();
@@ -2246,7 +2246,7 @@ function heRechazarObra(id){
   irTab("horas_extras");
 }
 function heRechazarProy(id){
-  const motivo=prompt("Motivo del rechazo (Andrés Chaves):");
+  const motivo=prompt("Motivo del rechazo (Director de Proyecto):");
   if(motivo===null) return;
   if(!motivo.trim()){alert("Debe escribir un motivo.");return;}
   const todos=getHorasExtras();
@@ -2263,7 +2263,7 @@ function heRechazarProy(id){
 
 // Aprobación semanal — aprueba TODOS los pendientes de una vez
 function heAprobarSemanaObra(){
-  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Raúl Echeverri?")) return;
+  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Director de Obra?")) return;
   const todos=getHorasExtras();
   const afectados=todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
   afectados.forEach(h=>{
@@ -2278,7 +2278,7 @@ function heAprobarSemanaObra(){
   irTab("horas_extras");
 }
 function heAprobarSemanaProy(){
-  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Andrés Chaves?")) return;
+  if(!confirm("¿Aprobar todos los registros pendientes de la semana como Director de Proyecto?")) return;
   const todos=getHorasExtras();
   const afectados=todos.filter(h=>h.estado==="pendiente"||h.estado==="rechazado_parcial");
   afectados.forEach(h=>{
