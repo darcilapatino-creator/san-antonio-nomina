@@ -418,17 +418,26 @@ function getATProxyURL(){ return localStorage.getItem(LS_AT_PROXY)||""; }
 function setATProxyURL(v){ localStorage.setItem(LS_AT_PROXY,v); }
 
 // ── Llamada genérica al proxy de Airtable ──
-async function atProxyCall(payload){
+async function atProxyCall(payload, _esReintento){
   const url = getATProxyURL();
   if(!url) throw new Error("Falta configurar la URL del proxy de Airtable.");
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita preflight CORS
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if(!data.ok) throw new Error(data.error || "Error desconocido del proxy.");
-  return data;
+  try{
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita preflight CORS
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || "Error desconocido del proxy.");
+    return data;
+  }catch(e){
+    // Reintento único ante fallos de conexión intermitentes (ej. mala señal en obra)
+    if(!_esReintento){
+      await new Promise(r=>setTimeout(r,1500));
+      return atProxyCall(payload, true);
+    }
+    throw e;
+  }
 }
 function mapearRegistroAT(rec){
   const f = rec.fields || {};
@@ -1002,7 +1011,13 @@ async function abrirCalendarioAsistencia(){
   c.innerHTML = `<div class="card"><div class="card-title">📅 Calendario de asistencia</div><div class="empty">⏳ Cargando...</div></div>`;
   try{
     const hist = getATProxyURL() ? await fetchAsistenciaHist(true) : getAsistenciaHist();
-    const histHE = getATProxyURL() ? await fetchHorasExtrasAT(true) : getHorasExtras();
+    let histHE = [];
+    try{
+      histHE = getATProxyURL() ? await fetchHorasExtrasAT(true) : getHorasExtras();
+    }catch(e2){
+      // Si falla Horas Extras (ej. mala conexión), igual mostramos el calendario de Asistencia
+      histHE = [];
+    }
     c.innerHTML = renderCalendarioAsistencia(hist, histHE);
   }catch(e){
     c.innerHTML = `<div class="card"><div class="alert alert-warn">⚠️ No se pudo cargar: ${e.message}</div>
