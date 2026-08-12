@@ -301,9 +301,9 @@ select.field-input{cursor:pointer}
 // ══════════════════════════════════════════════════
 const ROLES = {
   "5647": { nombre:"Yenny P. Vargas", rol:"SST",                  tabs:["asistencia","horas_extras","vinculacion"] },
-  "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",     tabs:["horas_extras","vinculacion","asistencia_ro"] },
-  "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["horas_extras","vinculacion","asistencia_ro","resumen"] },
-  "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","nomina","horas_extras","seguridad"] },
+  "3951": { nombre:"Raúl Echeverri",  rol:"Director de Obra",     tabs:["horas_extras","vinculacion","asistencia_ro","calendario"] },
+  "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["horas_extras","vinculacion","asistencia_ro","resumen","calendario"] },
+  "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","nomina","horas_extras","seguridad","calendario"] },
   "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",          tabs:["personal_con","horas_extras_con","seguridad"] },
   "1357": { nombre:"Administración",  rol:"Administración",        tabs:["vinculacion","personal_con"] },
   "7284": { nombre:"Residente",       rol:"Residente de Obra",     tabs:["asistencia_ro"] },
@@ -312,6 +312,7 @@ const ROLES = {
 const TAB_LABELS = {
   asistencia:      { icon:"✅", label:"Asistencia" },
   asistencia_ro:   { icon:"📋", label:"Asistencia" },
+  calendario:      { icon:"📅", label:"Calendario" },
   vinculacion:     { icon:"👤", label:"Vinculación" },
   horas_extras:    { icon:"⏱️", label:"Horas Extras" },
   horas_extras_con:{ icon:"⏱️", label:"Horas Extras" },
@@ -698,6 +699,7 @@ function irTab(id){
   const c=document.getElementById("mainContent");
   if(id==="asistencia")           c.innerHTML=renderAsistencia();
   else if(id==="asistencia_ro")   c.innerHTML=renderAsistenciaRO();
+  else if(id==="calendario")      abrirCalendarioAsistencia();
   else if(id==="vinculacion")     { c.innerHTML=renderVinculacion(); vincAutoSync(); }
   else if(id==="horas_extras")    { c.innerHTML=renderHorasExtras(); heAutoSync(); }
   else if(id==="horas_extras_con"){ c.innerHTML=renderHorasExtrasCon(); heAutoSync(); }
@@ -800,7 +802,8 @@ function renderAsistencia(){
   <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Personal activo en obra</div>
   <div id="listaTrab">${tarjetas}</div>
   <button class="btn btn-primary btn-block mt8" onclick="enviarAsistencia()">📤 Registrar asistencia del día</button>
-  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="abrirHistorialCorreccion()">✏️ Corregir registro anterior</button>`;
+  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="abrirHistorialCorreccion()">✏️ Corregir registro anterior</button>
+  <button class="btn btn-block mt8" style="background:var(--gray2);color:var(--text2)" onclick="abrirCalendarioAsistencia()">📅 Ver calendario mensual</button>`;
 }
 
 function toggleAsis(id){
@@ -972,6 +975,93 @@ async function enviarAsistencia(){
 // ══════════════════════════════════════════════════
 // CORRECCIÓN DE ASISTENCIA
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// CALENDARIO MENSUAL DE ASISTENCIA
+// ══════════════════════════════════════════════════
+let _calMesSel = null; // "YYYY-MM"
+
+function colorParaFila(fila){
+  if(!fila) return "#e5e7eb"; // gris — sin registro ese día
+  if(fila.estado==="Presente"){
+    return fila.salidaAnticipada ? "#2dd4bf" : "#22c55e";
+  }
+  const mapa = {
+    "Incapacidad médica":"#eab308",
+    "Permiso aprobado":"#f97316",
+    "Ausencia sin justificación":"#ef4444",
+    "Llegada tarde":"#3b82f6",
+    "Accidente de trabajo":"#a855f7"
+  };
+  return mapa[fila.novedad] || "#ef4444"; // rojo por defecto si ausente sin novedad reconocida
+}
+
+async function abrirCalendarioAsistencia(){
+  const c=document.getElementById("mainContent");
+  const hoy = new Date();
+  if(!_calMesSel) _calMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
+  c.innerHTML = `<div class="card"><div class="card-title">📅 Calendario de asistencia</div><div class="empty">⏳ Cargando...</div></div>`;
+  try{
+    const hist = getATProxyURL() ? await fetchAsistenciaHist(true) : getAsistenciaHist();
+    c.innerHTML = renderCalendarioAsistencia(hist);
+  }catch(e){
+    c.innerHTML = `<div class="card"><div class="alert alert-warn">⚠️ No se pudo cargar: ${e.message}</div>
+      <button class="btn" onclick="irTab('asistencia')">Volver</button></div>`;
+  }
+}
+function cambiarMesCalendario(v){
+  _calMesSel = v;
+  abrirCalendarioAsistencia();
+}
+function renderCalendarioAsistencia(hist){
+  const [anio,mes] = _calMesSel.split("-").map(Number);
+  const diasEnMes = new Date(anio, mes, 0).getDate();
+  const activos = getPersonal().filter(p=>p.activo);
+  const porFecha = {};
+  hist.forEach(r=>{ porFecha[r.fecha]=r; });
+  const diasCols = Array.from({length:diasEnMes},(_,i)=>i+1);
+
+  const legend = `
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin:10px 0;font-size:11px">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#22c55e;margin-right:4px"></span>Presente</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#2dd4bf;margin-right:4px"></span>Salida anticipada</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#ef4444;margin-right:4px"></span>Sin justificar</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#eab308;margin-right:4px"></span>Incapacidad</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f97316;margin-right:4px"></span>Permiso</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3b82f6;margin-right:4px"></span>Llegada tarde</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#a855f7;margin-right:4px"></span>Accidente</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e5e7eb;margin-right:4px"></span>Sin registro</span>
+    </div>`;
+
+  const filasHtml = activos.map(p=>{
+    const celdas = diasCols.map(d=>{
+      const fechaStr = String(d).padStart(2,"0")+"/"+String(mes).padStart(2,"0")+"/"+anio;
+      const reg = porFecha[fechaStr];
+      const fila = reg ? reg.filas.find(f=>f.nombre===p.nombre) : null;
+      const color = colorParaFila(fila);
+      const titulo = fila ? (fila.estado+(fila.novedad?" — "+fila.novedad:"")) : "Sin registro";
+      return `<td style="padding:0;text-align:center"><div title="${titulo}" style="width:16px;height:16px;background:${color};border-radius:3px;margin:1px auto"></div></td>`;
+    }).join("");
+    return `<tr><td style="position:sticky;left:0;background:var(--white);white-space:nowrap;padding:4px 8px;font-size:11px;border-right:1px solid var(--gray3)">${p.nombre}</td>${celdas}</tr>`;
+  }).join("");
+
+  const headerDias = diasCols.map(d=>`<th style="font-size:9px;padding:2px;font-weight:400;color:var(--text3)">${d}</th>`).join("");
+
+  return `
+  <div class="card">
+    <div class="card-title">📅 Calendario de asistencia</div>
+    <div class="field-group"><label class="field-label">Mes</label>
+      <input type="month" class="field-input" value="${_calMesSel}" onchange="cambiarMesCalendario(this.value)">
+    </div>
+    ${legend}
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse">
+        <thead><tr><th style="position:sticky;left:0;background:var(--white)"></th>${headerDias}</tr></thead>
+        <tbody>${filasHtml}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 async function abrirHistorialCorreccion(){
   const c=document.getElementById("mainContent");
   if(!getATProxyURL()){
