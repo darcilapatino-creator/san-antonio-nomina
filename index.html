@@ -418,7 +418,8 @@ function getATProxyURL(){ return localStorage.getItem(LS_AT_PROXY)||""; }
 function setATProxyURL(v){ localStorage.setItem(LS_AT_PROXY,v); }
 
 // ── Llamada genérica al proxy de Airtable ──
-async function atProxyCall(payload, _esReintento){
+async function atProxyCall(payload, _intento){
+  const intento = _intento || 1;
   const url = getATProxyURL();
   if(!url) throw new Error("Falta configurar la URL del proxy de Airtable.");
   try{
@@ -431,10 +432,10 @@ async function atProxyCall(payload, _esReintento){
     if(!data.ok) throw new Error(data.error || "Error desconocido del proxy.");
     return data;
   }catch(e){
-    // Reintento único ante fallos de conexión intermitentes (ej. mala señal en obra)
-    if(!_esReintento){
-      await new Promise(r=>setTimeout(r,1500));
-      return atProxyCall(payload, true);
+    // Hasta 2 reintentos ante fallos de conexión intermitentes (ej. mala señal o saturación momentánea)
+    if(intento<3){
+      await new Promise(r=>setTimeout(r,1500*intento));
+      return atProxyCall(payload, intento+1);
     }
     throw e;
   }
@@ -1010,18 +1011,26 @@ async function abrirCalendarioAsistencia(){
   if(!_calMesSel) _calMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
   c.innerHTML = `<div class="card"><div class="card-title">📅 Calendario de asistencia</div><div class="empty">⏳ Cargando...</div></div>`;
   try{
-    const hist = getATProxyURL() ? await fetchAsistenciaHist(true) : getAsistenciaHist();
-    let histHE = [];
-    try{
-      histHE = getATProxyURL() ? await fetchHorasExtrasAT(true) : getHorasExtras();
-    }catch(e2){
-      // Si falla Horas Extras (ej. mala conexión), igual mostramos el calendario de Asistencia
-      histHE = [];
+    let hist, histHE;
+    if(getATProxyURL()){
+      const data = await atProxyCall({accion:"leerCalendario"});
+      hist = (data.registrosAsistencia||[]).map(mapearRegistroAT);
+      hist.sort((a,b)=>{
+        const da=a.fecha.split("/").reverse().join("-");
+        const db=b.fecha.split("/").reverse().join("-");
+        return new Date(da) - new Date(db);
+      });
+      _asisHistCache = hist;
+      histHE = (data.registrosHorasExtras||[]).map(mapearHorasExtrasAT);
+      _heHistCache = histHE;
+    } else {
+      hist = getAsistenciaHist();
+      histHE = getHorasExtras();
     }
     c.innerHTML = renderCalendarioAsistencia(hist, histHE);
   }catch(e){
     c.innerHTML = `<div class="card"><div class="alert alert-warn">⚠️ No se pudo cargar: ${e.message}</div>
-      <button class="btn" onclick="irTab('asistencia')">Volver</button></div>`;
+      <button class="btn btn-primary" onclick="abrirCalendarioAsistencia()">🔄 Reintentar</button></div>`;
   }
 }
 function cambiarMesCalendario(v){
