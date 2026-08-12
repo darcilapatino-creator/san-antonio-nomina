@@ -1002,7 +1002,8 @@ async function abrirCalendarioAsistencia(){
   c.innerHTML = `<div class="card"><div class="card-title">📅 Calendario de asistencia</div><div class="empty">⏳ Cargando...</div></div>`;
   try{
     const hist = getATProxyURL() ? await fetchAsistenciaHist(true) : getAsistenciaHist();
-    c.innerHTML = renderCalendarioAsistencia(hist);
+    const histHE = getATProxyURL() ? await fetchHorasExtrasAT(true) : getHorasExtras();
+    c.innerHTML = renderCalendarioAsistencia(hist, histHE);
   }catch(e){
     c.innerHTML = `<div class="card"><div class="alert alert-warn">⚠️ No se pudo cargar: ${e.message}</div>
       <button class="btn" onclick="irTab('asistencia')">Volver</button></div>`;
@@ -1012,12 +1013,16 @@ function cambiarMesCalendario(v){
   _calMesSel = v;
   abrirCalendarioAsistencia();
 }
-function renderCalendarioAsistencia(hist){
+function renderCalendarioAsistencia(hist, histHE){
   const [anio,mes] = _calMesSel.split("-").map(Number);
   const diasEnMes = new Date(anio, mes, 0).getDate();
   const activos = getPersonal().filter(p=>p.activo);
   const porFecha = {};
   hist.forEach(r=>{ porFecha[r.fecha]=r; });
+  const heByFechaNombre = {};
+  (histHE||[]).forEach(r=>{
+    (r.detalle||[]).forEach(d=>{ heByFechaNombre[r.fecha+"|"+d.nombre]=true; });
+  });
   const diasCols = Array.from({length:diasEnMes},(_,i)=>i+1);
 
   const legend = `
@@ -1030,16 +1035,20 @@ function renderCalendarioAsistencia(hist){
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3b82f6;margin-right:4px"></span>Llegada tarde</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#a855f7;margin-right:4px"></span>Accidente</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e5e7eb;margin-right:4px"></span>Sin registro</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fff;border:2px solid #7c3aed;box-sizing:border-box;margin-right:4px"></span>Con horas extras</span>
     </div>`;
 
   const filasHtml = activos.map(p=>{
     const celdas = diasCols.map(d=>{
       const fechaStr = String(d).padStart(2,"0")+"/"+String(mes).padStart(2,"0")+"/"+anio;
+      const fechaISO = anio+"-"+String(mes).padStart(2,"0")+"-"+String(d).padStart(2,"0");
       const reg = porFecha[fechaStr];
       const fila = reg ? reg.filas.find(f=>f.nombre===p.nombre) : null;
       const color = colorParaFila(fila);
-      const titulo = fila ? (fila.estado+(fila.novedad?" — "+fila.novedad:"")) : "Sin registro";
-      return `<td style="padding:0;text-align:center"><div title="${titulo}" style="width:16px;height:16px;background:${color};border-radius:3px;margin:1px auto"></div></td>`;
+      const tieneHE = !!heByFechaNombre[fechaISO+"|"+p.nombre];
+      const titulo = (fila ? (fila.estado+(fila.novedad?" — "+fila.novedad:"")) : "Sin registro")+(tieneHE?" · Horas extras":"");
+      const borde = tieneHE ? "border:2px solid #7c3aed;box-sizing:border-box;" : "";
+      return `<td style="padding:0;text-align:center"><div title="${titulo}" style="width:16px;height:16px;background:${color};border-radius:3px;margin:1px auto;${borde}"></div></td>`;
     }).join("");
     return `<tr><td style="position:sticky;left:0;background:var(--white);white-space:nowrap;padding:4px 8px;font-size:11px;border-right:1px solid var(--gray3)">${p.nombre}</td>${celdas}</tr>`;
   }).join("");
