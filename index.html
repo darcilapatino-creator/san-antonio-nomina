@@ -225,6 +225,7 @@ select.field-input{cursor:pointer}
         <option value="6173">Director de Proyecto</option>
         <option value="4829">Finanzas</option>
         <option value="2038">CONSTRUCTHOR</option>
+        <option value="1357">Administración</option>
         <option value="7284">Residente de Obra</option>
       </select>
     </div>
@@ -304,6 +305,7 @@ const ROLES = {
   "6173": { nombre:"Andrés Chaves",   rol:"Director de Proyecto", tabs:["horas_extras","vinculacion","asistencia_ro","resumen"] },
   "4829": { nombre:"Finanzas",        rol:"Finanzas",              tabs:["resumen","nomina","horas_extras","seguridad"] },
   "2038": { nombre:"CONSTRUCTHOR",    rol:"CONSTRUCTHOR",          tabs:["personal_con","horas_extras_con","seguridad"] },
+  "1357": { nombre:"Administración",  rol:"Administración",        tabs:["vinculacion","personal_con"] },
   "7284": { nombre:"Residente",       rol:"Residente de Obra",     tabs:["asistencia_ro"] },
 };
 
@@ -519,17 +521,12 @@ async function heAutoSync(){
 // ── Vinculación: helpers de sincronización con Airtable ──
 function mapearVinculacionAT(rec){
   const f = rec.fields || {};
-  let datos={};
-  try{ datos = JSON.parse(f.Datos||"{}"); }catch(e){}
+  let completo={};
+  try{ completo = JSON.parse(f.Datos||"{}"); }catch(e){}
   return {
-    id: parseInt(f.AppId,10) || Date.now(),
-    nombre: f.Nombre||"",
-    cedula: datos.cedula||"", cargo: datos.cargo||"",
-    salario: datos.salario||0, fechaIngreso: datos.fechaIngreso||"",
-    examenes: datos.examenes||"",
-    aprobadoObra: !!datos.aprobadoObra, aprobadoProy: !!datos.aprobadoProy,
-    solicitadoPor: datos.solicitadoPor||"",
-    fechaSolicitud: f.FechaSolicitud||""
+    ...completo,
+    id: parseInt(f.AppId,10) || completo.id || Date.now(),
+    nombre: f.Nombre || completo.nombre || ""
   };
 }
 let _vincHistCache = null;
@@ -541,21 +538,21 @@ async function fetchVinculacionAT(forzar){
   return hist;
 }
 function vincEtapaTexto(emp){
-  if(emp.aprobadoObra&&emp.aprobadoProy) return "Activado";
-  if(emp.aprobadoObra) return "Pendiente Dir. Proyecto";
-  if(emp.aprobadoProy) return "Pendiente Dir. Obra";
-  return "Pendiente ambos directores";
+  if(emp.fechaEfectivaIngreso) return "Activado";
+  if(emp.examenResultado==="aptos" && emp.afiliacionesCompletas && emp.documentosDriveOk) return "Pendiente inducción (SST)";
+  if(emp.examenResultado==="no_aptos") return "En pausa — no aptos";
+  if(emp.aprobadoObra||emp.aprobadoProy) return "Pendiente Administración";
+  return "Pendiente aprobación de directores";
 }
 async function vincSincronizarUno(emp){
   if(!getATProxyURL()) return;
   try{
     await atProxyCall({accion:"guardarVinculacion", registro:{
       id: emp.id, nombre: emp.nombre, etapa: vincEtapaTexto(emp),
-      cedula: emp.cedula, cargo: emp.cargo, salario: emp.salario,
-      fechaIngreso: emp.fechaIngreso, examenes: emp.examenes,
-      aprobadoObra: emp.aprobadoObra, aprobadoProy: emp.aprobadoProy,
-      solicitadoPor: emp.solicitadoPor||"",
+      datosCompletos: emp,
+      driveUrl: emp.linkInduccion || emp.datos?.driveLinkFicha || "",
       aprobadoPor: [emp.aprobadoObra?"Director de Obra":"", emp.aprobadoProy?"Director de Proyecto":""].filter(Boolean).join(", "),
+      comentarioDir: [emp.comentarioObra, emp.comentarioProy].filter(Boolean).join(" | "),
       fechaSolicitud: emp.fechaSolicitud||emp.fechaIngreso||""
     }});
     _vincHistCache=null;
@@ -1190,13 +1187,13 @@ function renderVinculacion(){
     <div class="card-title">➕ Solicitar ingreso de nuevo trabajador</div>
     <div class="grid-2">
       <div class="field-group"><label class="field-label">Nombre completo</label>
-        <input class="field-input" id="nv-nombre" placeholder="Nombre completo"></div>
+        <input class="field-input req-field" id="nv-nombre" placeholder="Nombre completo"></div>
       <div class="field-group"><label class="field-label">Cédula</label>
-        <input class="field-input" id="nv-cedula" type="number" placeholder="Número de cédula"></div>
+        <input class="field-input req-field" id="nv-cedula" type="number" placeholder="Número de cédula"></div>
     </div>
     <div class="grid-2">
       <div class="field-group"><label class="field-label">Cargo</label>
-        <select class="field-input" id="nv-cargo">
+        <select class="field-input req-field" id="nv-cargo">
           <option value="">— Seleccione —</option>
           <option>Topógrafo</option><option>Aux. Topográfico</option>
           <option>Residente de Obra</option><option>Operador de Maquinaria</option>
@@ -1204,40 +1201,96 @@ function renderVinculacion(){
           <option>Oficial</option><option>Ayudante</option><option>Otro</option>
         </select></div>
       <div class="field-group"><label class="field-label">Salario base</label>
-        <input class="field-input" id="nv-salario" type="number" placeholder="Ej: 1750905"></div>
+        <input class="field-input req-field" id="nv-salario" type="number" placeholder="Ej: 1750905"></div>
     </div>
     <div class="grid-2">
       <div class="field-group"><label class="field-label">Fecha de ingreso</label>
-        <input class="field-input" id="nv-fecha" type="date"></div>
-      <div class="field-group"><label class="field-label">Exámenes médicos</label>
-        <select class="field-input" id="nv-examenes">
-          <option value="">— Seleccione —</option>
-          <option value="si">✅ Realizados y aptos</option>
-          <option value="pendiente">⏳ En proceso</option>
-        </select></div>
+        <input class="field-input req-field" id="nv-fecha" type="date"></div>
+      <div class="field-group"><label class="field-label">Link de Drive con la ficha CONSTRUCTHOR diligenciada</label>
+        <input class="field-input req-field" type="url" id="nv-driveLink" placeholder="https://drive.google.com/..."></div>
     </div>
     <button class="btn btn-primary btn-block" onclick="solicitarIngreso()">📨 Enviar solicitud de vinculación</button>
   </div>` : "";
 
   const pendCards = pend.length===0 ? "" : `
-  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">⏳ Pendientes de aprobación (${pend.length})</div>
+  <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">⏳ Pendientes (${pend.length})</div>
   ${pend.map(emp=>{
-    const chipObra=`<div class="chip ${emp.aprobadoObra?'chip-ok':'chip-pend'}">${emp.aprobadoObra?"✅ Director de Obra":"⏳ Director de Obra"}</div>`;
-    const chipProy=`<div class="chip ${emp.aprobadoProy?'chip-ok':'chip-pend'}">${emp.aprobadoProy?"✅ Director de Proyecto":"⏳ Director de Proyecto"}</div>`;
-    const btnObra=emp.aprobadoObra
-      ? `<button class="btn-aprov btn-aprov-obra aprobado" disabled>✅ Director de Obra aprobó</button>`
-      : (rolActual.rol==="Director de Obra"||rolActual.rol==="Director de Proyecto"
-          ? `<button class="btn-aprov btn-aprov-obra" onclick="aprobarObra(${emp.id})">👷 Aprobar — Director de Obra</button>`
-          : `<button class="btn-aprov btn-aprov-obra" disabled style="opacity:.5">⏳ Pendiente Dir. Obra</button>`);
-    const btnProy=emp.aprobadoProy
-      ? `<button class="btn-aprov btn-aprov-proy aprobado" disabled>✅ Director de Proyecto aprobó</button>`
-      : (rolActual.rol==="Director de Proyecto"
-          ? `<button class="btn-aprov btn-aprov-proy" onclick="aprobarProy(${emp.id})">💼 Aprobar — Director de Proyecto</button>`
-          : `<button class="btn-aprov btn-aprov-proy" disabled style="opacity:.5">⏳ Pendiente Dir. Proyecto</button>`);
-    const btnRech=esSSTouDir
-      ? `<button class="btn-aprov btn-rechazar" onclick="rechazar(${emp.id})">✖ Rechazar solicitud</button>` : "";
     const salFmt="$"+parseInt(emp.salario||0).toLocaleString("es-CO");
-    const exIcon=emp.examenes==="si"?"✅ Aptos":"⏳ En proceso";
+    const algunDirectorAprobo = emp.aprobadoObra || emp.aprobadoProy;
+    const adminCompleta = emp.examenResultado==="aptos" && emp.afiliacionesCompletas && emp.documentosDriveOk;
+
+    // ── Etapa 1: aprobación de directores (basta con que apruebe UNO) ──
+    let etapa1 = "";
+    if(!algunDirectorAprobo){
+      const chipObra=`<div class="chip chip-pend">⏳ Director de Obra</div>`;
+      const chipProy=`<div class="chip chip-pend">⏳ Director de Proyecto</div>`;
+      const btnObra=rolActual.rol==="Director de Obra"
+        ? `<button class="btn-aprov btn-aprov-obra" onclick="aprobarObra(${emp.id})">👷 Aprobar — Director de Obra</button>` : "";
+      const btnProy=rolActual.rol==="Director de Proyecto"
+        ? `<button class="btn-aprov btn-aprov-proy" onclick="aprobarProy(${emp.id})">💼 Aprobar — Director de Proyecto</button>` : "";
+      const btnRech=(rolActual.rol==="Director de Obra"||rolActual.rol==="Director de Proyecto"||rolActual.rol==="SST")
+        ? `<button class="btn-aprov btn-rechazar" onclick="rechazar(${emp.id})">✖ Rechazar solicitud</button>` : "";
+      etapa1 = `<div class="estado-chips">${chipObra}${chipProy}</div><div class="aprov-btns">${btnObra}${btnProy}${btnRech}</div>`;
+    } else {
+      etapa1 = `<div class="alert alert-info" style="margin-top:8px">✅ Aprobado por ${emp.aprobadoObra&&emp.aprobadoProy?"ambos directores":emp.aprobadoObra?"el Director de Obra":"el Director de Proyecto"}.</div>`;
+    }
+
+    // ── Etapa 2: Administración (exámenes, afiliaciones, documentos) ──
+    let etapa2 = "";
+    if(algunDirectorAprobo && !adminCompleta){
+      if(rolActual.rol!=="Administración"){
+        etapa2 = `<div class="alert alert-warn" style="margin-top:8px">📋 En proceso con Administración (exámenes médicos, afiliaciones y documentos).</div>`;
+      } else {
+        const pasoExamen = !emp.examenEnviado ? `
+          <button class="btn btn-sm btn-primary" onclick="vincMarcarExamenEnviado(${emp.id})">📤 Marcar enviado a exámenes médicos</button>`
+          : !emp.examenResultado ? `
+          <div style="margin-top:6px">Resultado del examen:
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button class="btn btn-sm btn-success" onclick="vincMarcarExamenResultado(${emp.id},'aptos')">✅ Aptos</button>
+              <button class="btn btn-sm" style="color:var(--red)" onclick="vincMarcarExamenResultado(${emp.id},'no_aptos')">❌ No aptos</button>
+            </div>
+          </div>`
+          : emp.examenResultado==="no_aptos" ? `
+          <div class="alert alert-warn" style="margin-top:6px">❌ Resultado: No aptos. Solicitud en pausa — use "Rechazar solicitud" si corresponde.</div>`
+          : `<div class="alert alert-info" style="margin-top:6px">✅ Exámenes: Aptos</div>`;
+        const pasoAfiliaciones = emp.examenResultado==="aptos" ? `
+          <div style="margin-top:6px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+              <input type="checkbox" ${emp.afiliacionesCompletas?"checked":""} onchange="vincMarcarAfiliaciones(${emp.id},this.checked)">
+              Afiliaciones completadas (EPS, Pensión, ARL, CCF)
+            </label>
+          </div>` : "";
+        const pasoDrive = emp.examenResultado==="aptos" ? `
+          <div style="margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+              <input type="checkbox" ${emp.documentosDriveOk?"checked":""} onchange="vincMarcarDocumentosDrive(${emp.id},this.checked)">
+              Documentos subidos a Drive
+            </label>
+          </div>` : "";
+        const btnRechAdmin = `<button class="btn-aprov btn-rechazar" style="margin-top:8px" onclick="rechazar(${emp.id})">✖ Rechazar solicitud</button>`;
+        etapa2 = `<div class="alert alert-warn" style="margin-top:8px">📋 <strong>Administración</strong>${pasoExamen}${pasoAfiliaciones}${pasoDrive}${btnRechAdmin}</div>`;
+      }
+    } else if(adminCompleta){
+      etapa2 = `<div class="alert alert-info" style="margin-top:8px">✅ Exámenes, afiliaciones y documentos completos.</div>`;
+    }
+
+    // ── Etapa 3: SST — inducción y activación final ──
+    let etapa3 = "";
+    if(adminCompleta){
+      if(rolActual.rol==="SST"){
+        etapa3 = `<div class="alert alert-warn" style="margin-top:8px">
+          🏁 <strong>Paso final</strong> — registre el comprobante de inducción y la fecha efectiva de ingreso.
+          <div class="field-group" style="margin-top:8px"><label class="field-label">Link comprobante inducción (Drive)</label>
+            <input id="linkInduccion-${emp.id}" type="url" class="field-input" placeholder="https://drive.google.com/..."></div>
+          <div class="field-group"><label class="field-label">Fecha efectiva de ingreso</label>
+            <input id="fechaEfectiva-${emp.id}" type="date" class="field-input"></div>
+          <button class="btn btn-sm btn-primary" onclick="vincFinalizarInduccion(${emp.id})">🏁 Registrar y activar</button>
+        </div>`;
+      } else {
+        etapa3 = `<div class="alert alert-warn" style="margin-top:8px">🏁 Pendiente de que SST registre la inducción y active al trabajador.</div>`;
+      }
+    }
+
     return `
     <div class="pend-card">
       <div class="pend-header">
@@ -1250,11 +1303,11 @@ function renderVinculacion(){
           <div class="pend-dato"><strong>${salFmt}</strong>Salario</div>
           <div class="pend-dato"><strong>${emp.cedula||"—"}</strong>Cédula</div>
           <div class="pend-dato"><strong>${emp.fechaIngreso||"—"}</strong>Fecha ingreso</div>
-          <div class="pend-dato"><strong>${exIcon}</strong>Exámenes médicos</div>
           <div class="pend-dato"><strong>${emp.solicitadoPor||"SST"}</strong>Solicitado por</div>
         </div>
-        <div class="estado-chips">${chipObra}${chipProy}</div>
-        <div class="aprov-btns">${btnObra}${btnProy}${btnRech}</div>
+        ${etapa1}
+        ${etapa2}
+        ${etapa3}
       </div>
     </div>`;
   }).join("")}`;
@@ -1290,21 +1343,37 @@ function renderVinculacion(){
 }
 
 function solicitarIngreso(){
-  const nombre=document.getElementById("nv-nombre")?.value?.trim();
-  const cedula=document.getElementById("nv-cedula")?.value?.trim();
-  const cargo=document.getElementById("nv-cargo")?.value;
-  const salario=document.getElementById("nv-salario")?.value?.trim();
-  const fecha=document.getElementById("nv-fecha")?.value;
-  const exams=document.getElementById("nv-examenes")?.value;
-  if(!nombre||!cedula||!cargo||!salario||!fecha||!exams){alert("Complete todos los campos.");return;}
+  const camposReq = document.querySelectorAll(".req-field");
+  for(const el of camposReq){
+    if(!el.value || !el.value.trim()){
+      alert("Complete todos los campos.");
+      el.focus();
+      return;
+    }
+  }
+  const v = id => document.getElementById(id)?.value?.trim() || "";
+  const nombre = v("nv-nombre");
+  const cedula = v("nv-cedula");
+  const cargo = v("nv-cargo");
+  const salario = v("nv-salario");
+  const fecha = v("nv-fecha");
+  const driveLinkFicha = v("nv-driveLink");
+
   const pend=getPendientes();
-  const nuevo={id:Date.now(),nombre,cedula,cargo,salario:parseInt(salario),fechaIngreso:fecha,
-    examenes:exams,solicitadoPor:rolActual.nombre+" (SST)",aprobadoObra:false,aprobadoProy:false,
-    fechaSolicitud:new Date().toISOString().slice(0,10)};
+  const nuevo={
+    id:Date.now(), nombre, cedula, cargo, salario:parseInt(salario), fechaIngreso:fecha,
+    solicitadoPor:rolActual.nombre+" (SST)",
+    aprobadoObra:false, comentarioObra:"", rechazadoObra:false, motivoRechazoObra:"",
+    aprobadoProy:false, comentarioProy:"", rechazadoProy:false, motivoRechazoProy:"",
+    examenEnviado:false, examenResultado:"", afiliacionesCompletas:false, documentosDriveOk:false,
+    linkInduccion:"", fechaEfectivaIngreso:"",
+    fechaSolicitud:new Date().toISOString().slice(0,10),
+    datos:{ driveLinkFicha }
+  };
   pend.push(nuevo);
   setPendientes(pend);
   vincSincronizarUno(nuevo);
-  mostrarOk("¡Solicitud enviada!",`Se notificará al Director de Obra y al Director de Proyecto para su aprobación.`+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo."),
+  mostrarOk("¡Solicitud enviada!",`Con que apruebe uno de los dos directores, avanza al siguiente paso.`+(getATProxyURL()?" Sincronizado con Airtable.":" ⚠️ Airtable no conectado en este dispositivo."),
     `<div class="ok-row"><span class="l">Trabajador</span><span>${nombre}</span></div>
      <div class="ok-row"><span class="l">Cargo</span><span>${cargo}</span></div>`);
 }
@@ -1313,41 +1382,78 @@ function aprobarObra(id){
   const pend=getPendientes();
   const emp=pend.find(p=>p.id===id);
   if(!emp)return;
+  const comentario=prompt("Comentario (opcional):")||"";
   emp.aprobadoObra=true;
+  emp.comentarioObra=comentario;
   setPendientes(pend);
   vincSincronizarUno(emp);
-  verificarActivacion(id);
   irTab("vinculacion");
 }
 function aprobarProy(id){
   const pend=getPendientes();
   const emp=pend.find(p=>p.id===id);
   if(!emp)return;
+  const comentario=prompt("Comentario (opcional):")||"";
   emp.aprobadoProy=true;
+  emp.comentarioProy=comentario;
   setPendientes(pend);
   vincSincronizarUno(emp);
-  verificarActivacion(id);
   irTab("vinculacion");
 }
 function rechazar(id){
-  if(!confirm("¿Rechazar esta solicitud?"))return;
+  const motivo=prompt("Motivo del rechazo:");
+  if(motivo===null)return;
+  if(!motivo.trim()){alert("Debe indicar un motivo.");return;}
+  if(!confirm("¿Confirmar el rechazo de esta solicitud?"))return;
   setPendientes(getPendientes().filter(p=>p.id!==id));
   vincEliminarUno(id);
   irTab("vinculacion");
 }
-function verificarActivacion(id){
+
+// ── Etapa Administración ──
+function vincMarcarExamenEnviado(id){
+  const pend=getPendientes(); const emp=pend.find(p=>p.id===id); if(!emp)return;
+  emp.examenEnviado=true;
+  setPendientes(pend); vincSincronizarUno(emp); irTab("vinculacion");
+}
+function vincMarcarExamenResultado(id,resultado){
+  const pend=getPendientes(); const emp=pend.find(p=>p.id===id); if(!emp)return;
+  emp.examenResultado=resultado;
+  setPendientes(pend); vincSincronizarUno(emp); irTab("vinculacion");
+}
+function vincMarcarAfiliaciones(id,checked){
+  const pend=getPendientes(); const emp=pend.find(p=>p.id===id); if(!emp)return;
+  emp.afiliacionesCompletas=checked;
+  setPendientes(pend); vincSincronizarUno(emp); irTab("vinculacion");
+}
+function vincMarcarDocumentosDrive(id,checked){
+  const pend=getPendientes(); const emp=pend.find(p=>p.id===id); if(!emp)return;
+  emp.documentosDriveOk=checked;
+  setPendientes(pend); vincSincronizarUno(emp); irTab("vinculacion");
+}
+
+// ── Etapa final SST: inducción + fecha efectiva → activación ──
+function vincFinalizarInduccion(id){
+  const link=document.getElementById("linkInduccion-"+id)?.value?.trim();
+  const fechaEf=document.getElementById("fechaEfectiva-"+id)?.value;
+  if(!link){alert("Pegue el link del comprobante de inducción.");return;}
+  if(!fechaEf){alert("Indique la fecha efectiva de ingreso.");return;}
   const pend=getPendientes();
   const emp=pend.find(p=>p.id===id);
-  if(!emp||!emp.aprobadoObra||!emp.aprobadoProy)return;
+  if(!emp)return;
+  emp.linkInduccion=link;
+  emp.fechaEfectivaIngreso=fechaEf;
   const personal=getPersonal();
   personal.push({id:Date.now(),nombre:emp.nombre,cargo:emp.cargo,cedula:emp.cedula,
-    salario:emp.salario,fechaIngreso:emp.fechaIngreso,
-    eps:"—",pension:"—",arl:"Positiva",ccf:"Comfaboy",activo:true});
+    salario:emp.salario,fechaIngreso:fechaEf,
+    eps:emp.datos?.eps||"—",pension:emp.datos?.pension||"—",
+    arl:emp.datos?.arl||"Positiva",ccf:emp.datos?.ccf||"Comfaboy",activo:true});
   setPersonal(personal);
   setPendientes(pend.filter(p=>p.id!==id));
   vincEliminarUno(id);
-  estadoAsis[emp.id]={presente:null,novedad:null,obs:""};
-  alert(`🎉 ${emp.nombre} activado en el sistema de nómina.`);
+  estadoAsis[personal[personal.length-1].id]={presente:null,novedad:null,obs:""};
+  alert(`🎉 ${emp.nombre} activado en el sistema de nómina, efectivo desde ${fechaEf}.`);
+  irTab("vinculacion");
 }
 
 // ══════════════════════════════════════════════════
