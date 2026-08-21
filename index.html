@@ -528,6 +528,13 @@ async function heAutoSync(){
   }catch(e){ /* silencioso: si falla, se queda con la última copia local conocida */ }
   _heAutoSyncEnCurso=false;
 }
+// Re-renderiza Horas Extras SIN disparar heAutoSync — usar después de cualquier
+// escritura local (aprobar, rechazar, editar) para no arriesgar que la sincronización
+// automática traiga una versión vieja de Airtable y borre el cambio recién hecho.
+function heRerenderSinSync(){
+  const cont=document.getElementById("mainContent");
+  if(cont) cont.innerHTML=renderHorasExtras();
+}
 
 // ── Vinculación: helpers de sincronización con Airtable ──
 function mapearVinculacionAT(rec){
@@ -2346,8 +2353,10 @@ function heRevision(id, nombre, valor){
   if(!reg[campo][nombre]) reg[campo][nombre]={estado:'pendiente',comentario:''};
   reg[campo][nombre].estado = valor; // 'aprobado', 'rechazado' o 'pendiente'
   setHorasExtras(todos);
-  // Actualizar color del select inmediatamente
-  irTab("horas_extras");
+  // Re-render SIN disparar la sincronización automática con Airtable —
+  // si no, trae la versión vieja y borra la marca que se acaba de dar
+  const cont=document.getElementById("mainContent");
+  if(cont) cont.innerHTML=renderHorasExtras();
 }
 
 // Guardar comentario por trabajador individual
@@ -2443,7 +2452,7 @@ function heAprobarObra(id){
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
   heSincronizarUno(reg);
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 function heAprobarProy(id){
   const todos=getHorasExtras();
@@ -2455,7 +2464,7 @@ function heAprobarProy(id){
   if(reg.aprobadoObra&&reg.aprobadoProy) reg.estado="aprobado";
   setHorasExtras(todos);
   heSincronizarUno(reg);
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 
 // Rechazo con motivo
@@ -2472,7 +2481,7 @@ function heRechazarObra(id){
   reg.estado="rechazado_parcial";
   setHorasExtras(todos);
   heSincronizarUno(reg);
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 function heRechazarProy(id){
   const motivo=prompt("Motivo del rechazo (Director de Proyecto):");
@@ -2487,7 +2496,7 @@ function heRechazarProy(id){
   reg.estado="rechazado_parcial";
   setHorasExtras(todos);
   heSincronizarUno(reg);
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 
 // Aprobación semanal — aprueba TODOS los pendientes de una vez
@@ -2504,7 +2513,7 @@ function heAprobarSemanaObra(){
   });
   setHorasExtras(todos);
   afectados.forEach(h=>heSincronizarUno(h));
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 function heAprobarSemanaProy(){
   if(!confirm("¿Aprobar todos los registros pendientes de la semana como Director de Proyecto?")) return;
@@ -2519,7 +2528,7 @@ function heAprobarSemanaProy(){
   });
   setHorasExtras(todos);
   afectados.forEach(h=>heSincronizarUno(h));
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 
 function heRechazar(id){
@@ -2530,7 +2539,7 @@ function heRechazar(id){
       alert("⚠️ Se eliminó localmente, pero no se pudo eliminar en Airtable: "+e.message);
     });
   }
-  irTab("horas_extras");
+  heRerenderSinSync();
 }
 
 // Corrección HE — SST corrige un registro rechazado o pendiente
@@ -2563,7 +2572,7 @@ function heEditar(id){
   setHorasExtras(todos.filter(h=>h.id!==id));
 
   // Ir al tab con los datos precargados
-  irTab("horas_extras");
+  heRerenderSinSync();
 
   // Aplicar valores al formulario después de renderizar
   setTimeout(()=>{
