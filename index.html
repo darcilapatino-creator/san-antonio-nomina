@@ -2595,10 +2595,42 @@ function heEditar(id){
 // ══════════════════════════════════════════════════
 // NÓMINA — Liquidación integrada
 // ══════════════════════════════════════════════════
+// Registros de horas extras que se pueden usar para liquidar:
+// - "aprobado": ambos directores aprobaron (confirmado)
+// - al menos un director aprobó y ninguno rechazó (preliminar, sujeto a cambio)
+function heParaLiquidar(lista){
+  return lista.filter(h=>
+    h.estado==="aprobado" ||
+    ((h.aprobadoObra||h.aprobadoProy) && !h.rechazadoObra && !h.rechazadoProy)
+  );
+}
+function heEsPreliminar(h){ return h.estado!=="aprobado"; }
+
+async function nominaSincronizarDesdeAirtable(){
+  document.getElementById("overlayLoad").classList.add("vis");
+  try{
+    const data = await atProxyCall({accion:"leerCalendario"});
+    const hist = (data.registrosAsistencia||[]).map(mapearRegistroAT);
+    _asisHistCache = hist;
+    setAsistenciaHist(hist);
+    const histHE = (data.registrosHorasExtras||[]).map(mapearHorasExtrasAT);
+    _heHistCache = histHE;
+    setHorasExtras(histHE);
+    document.getElementById("overlayLoad").classList.remove("vis");
+    irTab("nomina");
+  }catch(e){
+    document.getElementById("overlayLoad").classList.remove("vis");
+    alert("⚠️ No se pudo traer los datos más recientes de Airtable: "+e.message);
+  }
+}
+
 function renderNomina(){
   const personal=getPersonal().filter(p=>p.activo);
   const hist=getAsistenciaHist();
-  const heAprobadas=getHorasExtras().filter(h=>h.estado==="aprobado");
+  const heTodas=getHorasExtras();
+  const heParaCalculo=heParaLiquidar(heTodas);
+  const heAprobadas=heTodas.filter(h=>h.estado==="aprobado");
+  const hayPreliminares = heParaCalculo.length>heAprobadas.length;
   const SMMLV=1750905, AUX_T=249095;
 
   // Calcular días por trabajador desde historial
@@ -2615,13 +2647,15 @@ function renderNomina(){
     });
   });
 
-  // Calcular HE por trabajador
+  // Calcular HE por trabajador (incluye preliminares — ver heParaLiquidar)
   const heMap={};
-  heAprobadas.forEach(reg=>{
+  heParaCalculo.forEach(reg=>{
+    const prelim = heEsPreliminar(reg);
     reg.detalle.forEach(d=>{
-      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0};
+      if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0,tienePrelim:false};
       heMap[d.nombre].horas+=d.horas;
       heMap[d.nombre].valor+=d.valor;
+      if(prelim) heMap[d.nombre].tienePrelim=true;
     });
   });
 
@@ -2633,19 +2667,20 @@ function renderNomina(){
     const aux=p.salario<=2*SMMLV?AUX_T:0;
     const salProp=Math.round(p.salario*d/30);
     const auxProp=Math.round(aux*d/30);
-    const he=heMap[p.nombre]||{horas:0,valor:0};
+    const he=heMap[p.nombre]||{horas:0,valor:0,tienePrelim:false};
     const totalDev=salProp+auxProp+he.valor;
     const dedSalud=Math.round(salProp*0.04);
     const dedPens=Math.round(salProp*0.04);
     const neto=totalDev-dedSalud-dedPens;
     const bg=i%2===0?"#f8fafc":"#fff";
+    const heTxt = he.horas>0 ? he.horas.toFixed(1)+"h · $"+he.valor.toLocaleString("es-CO")+(he.tienePrelim?" ⚠️":"") : "—";
     return `<tr style="background:${bg}">
       <td style="font-size:12px"><strong>${p.nombre}</strong><br><span class="muted">${p.cargo}</span></td>
       <td style="text-align:center;color:var(--green);font-weight:600">${d}</td>
       <td style="text-align:center;color:var(--red)">${dias.ausentes||0}</td>
       <td style="text-align:right">$${salProp.toLocaleString("es-CO")}</td>
       <td style="text-align:right">${auxProp>0?"$"+auxProp.toLocaleString("es-CO"):"—"}</td>
-      <td style="text-align:right;color:var(--blue)">${he.horas>0?he.horas.toFixed(1)+"h · $"+he.valor.toLocaleString("es-CO"):"—"}</td>
+      <td style="text-align:right;color:var(--blue)" title="${he.tienePrelim?'Incluye horas preliminares (falta un director por aprobar)':''}">${heTxt}</td>
       <td style="text-align:right;font-weight:700">$${totalDev.toLocaleString("es-CO")}</td>
       <td style="text-align:right;color:var(--red)">-$${(dedSalud+dedPens).toLocaleString("es-CO")}</td>
       <td style="text-align:right;font-weight:700;color:var(--green)">$${neto.toLocaleString("es-CO")}</td>
@@ -2665,12 +2700,20 @@ function renderNomina(){
   },0);
 
   const alertaSinReg = sinRegistros ? '<div class="alert alert-warn">📌 Aún no hay registros de asistencia. La nómina se calculará automáticamente conforme la SST registre los días.</div>' : "";
+  const alertaPrelim = hayPreliminares ? `<div class="alert alert-warn">⚠️ Incluye horas extras <strong>preliminares</strong> (aprobadas solo por un director, marcadas con ⚠️) — pueden cambiar hasta que el otro director apruebe.</div>` : "";
+  const syncBannerNomina = getATProxyURL() ? `
+    <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>📡 Conectado a Airtable</span>
+      <button class="btn btn-sm" onclick="nominaSincronizarDesdeAirtable()">🔄 Traer datos más recientes</button>
+    </div>` : `<div class="alert alert-warn">🔗 Airtable no conectado en este dispositivo — la nómina se calcula solo con datos locales de este computador.</div>`;
 
   return `
+  ${syncBannerNomina}
   ${alertaSinReg}
+  ${alertaPrelim}
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-label">Días registrados</div><div class="stat-val azul">${hist.length}</div></div>
-    <div class="stat-box"><div class="stat-label">HE aprobadas</div><div class="stat-val">${heAprobadas.length} reg.</div></div>
+    <div class="stat-box"><div class="stat-label">HE incluidas</div><div class="stat-val">${heParaCalculo.length} reg.${hayPreliminares?' ⚠️':''}</div></div>
     <div class="stat-box"><div class="stat-label">Neto total estimado</div><div class="stat-val verde" style="font-size:16px">$${totNeto.toLocaleString("es-CO")}</div></div>
   </div>
   <div class="card">
@@ -2698,15 +2741,31 @@ function renderNomina(){
 // ══════════════════════════════════════════════════
 // EXPORTAR EXCEL DE NÓMINA
 // ══════════════════════════════════════════════════
-function exportarNominaExcel(){
+async function exportarNominaExcel(){
   if(typeof XLSX === "undefined"){
     alert("La librería de Excel aún está cargando. Espere un momento e intente de nuevo.");
     return;
   }
+  // Traer datos frescos de Airtable antes de generar el Excel, para no liquidar con información desactualizada
+  if(getATProxyURL()){
+    document.getElementById("overlayLoad").classList.add("vis");
+    try{
+      const data = await atProxyCall({accion:"leerCalendario"});
+      setAsistenciaHist((data.registrosAsistencia||[]).map(mapearRegistroAT));
+      setHorasExtras((data.registrosHorasExtras||[]).map(mapearHorasExtrasAT));
+      _asisHistCache=null; _heHistCache=null;
+    }catch(e){
+      document.getElementById("overlayLoad").classList.remove("vis");
+      if(!confirm("⚠️ No se pudo traer los datos más recientes de Airtable ("+e.message+").\n\n¿Continuar de todas formas con los datos guardados en este computador?")) return;
+    }
+    document.getElementById("overlayLoad").classList.remove("vis");
+  }
 
   const todoPersonal = getPersonal(); // incluye retirados
   const hist         = getAsistenciaHist();
-  const heAprobadas  = getHorasExtras().filter(h=>h.estado==="aprobado");
+  const heTodas      = getHorasExtras();
+  const heAprobadas  = heParaLiquidar(heTodas);
+  const hayPreliminaresExport = heAprobadas.some(h=>heEsPreliminar(h));
   const SMMLV = 1750905, AUX_T = 249095;
   const MES_NUM = new Date().getMonth()+1;
   const ANIO_NUM = new Date().getFullYear();
@@ -2861,6 +2920,10 @@ function exportarNominaExcel(){
     },0)
   );
   heData.push(totFila);
+  if(hayPreliminaresExport){
+    const notaFila = ["⚠️ Incluye horas extras preliminares (aprobadas solo por un director) — sujeto a cambios hasta aprobación completa.",""];
+    heData.push(notaFila);
+  }
 
   const wsHE = XLSX.utils.aoa_to_sheet(heData);
   wsHE["!cols"] = [{wch:28},{wch:18},...Array(DIAS_MES).fill({wch:3.5}),
