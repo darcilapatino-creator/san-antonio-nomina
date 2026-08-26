@@ -2604,6 +2604,11 @@ function heParaLiquidar(lista){
     ((h.aprobadoObra||h.aprobadoProy) && !h.rechazadoObra && !h.rechazadoProy)
   );
 }
+let _nominaMesSel = null; // "YYYY-MM"
+function cambiarMesNomina(v){
+  _nominaMesSel = v;
+  irTab("nomina");
+}
 function heEsPreliminar(h){ return h.estado!=="aprobado"; }
 
 async function nominaSincronizarDesdeAirtable(){
@@ -2625,15 +2630,25 @@ async function nominaSincronizarDesdeAirtable(){
 }
 
 function renderNomina(){
+  const hoy=new Date();
+  if(!_nominaMesSel) _nominaMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
   const personal=getPersonal().filter(p=>p.activo);
-  const hist=getAsistenciaHist();
-  const heTodas=getHorasExtras();
+  const histTodo=getAsistenciaHist();
+  const heTodasSinFiltrar=getHorasExtras();
+  // Filtrar SOLO los registros del mes seleccionado
+  const hist = histTodo.filter(r=>{
+    const partes=r.fecha.split("/"); // DD/MM/YYYY
+    if(partes.length<3) return false;
+    const claveMes = partes[2]+"-"+partes[1].padStart(2,"0");
+    return claveMes===_nominaMesSel;
+  });
+  const heTodas = heTodasSinFiltrar.filter(h=>(h.fecha||"").slice(0,7)===_nominaMesSel);
   const heParaCalculo=heParaLiquidar(heTodas);
   const heAprobadas=heTodas.filter(h=>h.estado==="aprobado");
   const hayPreliminares = heParaCalculo.length>heAprobadas.length;
   const SMMLV=1750905, AUX_T=249095;
 
-  // Calcular días por trabajador desde historial
+  // Calcular días por trabajador desde historial (solo del mes seleccionado)
   const diasMap={};
   personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0,novedades:[]}; });
   hist.forEach(reg=>{
@@ -2709,6 +2724,9 @@ function renderNomina(){
 
   return `
   ${syncBannerNomina}
+  <div class="field-group"><label class="field-label">Mes a liquidar</label>
+    <input type="month" class="field-input" value="${_nominaMesSel}" onchange="cambiarMesNomina(this.value)">
+  </div>
   ${alertaSinReg}
   ${alertaPrelim}
   <div class="stat-grid">
@@ -2762,14 +2780,20 @@ async function exportarNominaExcel(){
   }
 
   const todoPersonal = getPersonal(); // incluye retirados
-  const hist         = getAsistenciaHist();
-  const heTodas      = getHorasExtras();
+  const hoy=new Date();
+  if(!_nominaMesSel) _nominaMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
+  const ANIO_NUM = parseInt(_nominaMesSel.split("-")[0]);
+  const MES_NUM  = parseInt(_nominaMesSel.split("-")[1]);
+  const DIAS_MES = new Date(ANIO_NUM, MES_NUM, 0).getDate();
+  const hist    = getAsistenciaHist().filter(r=>{
+    const partes=r.fecha.split("/");
+    if(partes.length<3) return false;
+    return (partes[2]+"-"+partes[1].padStart(2,"0"))===_nominaMesSel;
+  });
+  const heTodas = getHorasExtras().filter(h=>(h.fecha||"").slice(0,7)===_nominaMesSel);
   const heAprobadas  = heParaLiquidar(heTodas);
   const hayPreliminaresExport = heAprobadas.some(h=>heEsPreliminar(h));
   const SMMLV = 1750905, AUX_T = 249095;
-  const MES_NUM = new Date().getMonth()+1;
-  const ANIO_NUM = new Date().getFullYear();
-  const DIAS_MES = new Date(ANIO_NUM, MES_NUM, 0).getDate();
 
   // ── Calcular días presentes por trabajador desde historial ──
   const diasMap = {};
@@ -2790,9 +2814,10 @@ async function exportarNominaExcel(){
     heDias[p.nombre] = {};
   });
   heAprobadas.forEach(reg=>{
-    const fecha = reg.fecha; // "DD/MM/YYYY"
-    const dia   = parseInt(fecha.split("/")[0]);
-    const dow   = new Date(parseInt(fecha.split("/")[2]), parseInt(fecha.split("/")[1])-1, dia).getDay();
+    const fecha = reg.fecha; // "YYYY-MM-DD"
+    const partesF = fecha.split("-");
+    const dia = parseInt(partesF[2]);
+    const dow = new Date(parseInt(partesF[0]), parseInt(partesF[1])-1, dia).getDay();
     reg.detalle.forEach(d=>{
       if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0,diurnas:0,dominicales:0};
       if(!heDias[d.nombre]) heDias[d.nombre]={};
