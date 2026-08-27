@@ -2644,13 +2644,29 @@ function construirDiasMap(hist, personal){
 // Días base a pagar: 30 por defecto, menos ausencias sin justificar e incapacidad >2 días.
 // Permiso aprobado, accidente de trabajo y llegada tarde NO descuentan (se pagan normal).
 // Si el trabajador ingresó dentro de este mes, se limita proporcionalmente desde su fecha de ingreso.
+// Interpreta una fecha en formato colombiano DD/MM/YYYY o ISO YYYY-MM-DD (nunca MM/DD/YYYY,
+// que es lo que asume "new Date(string)" por defecto y causaba fechas equivocadas)
+function parsearFechaFlexible(str){
+  if(!str) return null;
+  if(str.includes("/")){
+    const [d,m,y]=str.split("/").map(Number);
+    if(!d||!m||!y) return null;
+    return new Date(y,m-1,d);
+  }
+  if(str.includes("-")){
+    const [y,m,d]=str.split("-").map(Number);
+    if(!d||!m||!y) return null;
+    return new Date(y,m-1,d);
+  }
+  return null;
+}
 function diasAPagar(p, diasMap, incapFechas, anioM, mesM){
   const nov=diasMap[p.nombre]?.novedades||[];
   const diasInjust=nov.filter(n=>n==="Ausencia sin justificación").length;
   const diasIncap=diasIncapacidadADescontar(incapFechas[p.nombre]||[]);
   let dias=30-diasInjust-diasIncap;
-  if(p.fechaIngreso){
-    const ing=new Date(p.fechaIngreso);
+  const ing=parsearFechaFlexible(p.fechaIngreso);
+  if(ing){
     const inicioMes=new Date(anioM,mesM-1,1), finMes=new Date(anioM,mesM,0);
     if(ing>=inicioMes && ing<=finMes){
       const diasCorridosMes=finMes.getDate();
