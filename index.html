@@ -2852,14 +2852,14 @@ async function exportarNominaExcel(){
     const fecha = reg.fecha; // "YYYY-MM-DD"
     const partesF = fecha.split("-");
     const dia = parseInt(partesF[2]);
-    const dow = new Date(parseInt(partesF[0]), parseInt(partesF[1])-1, dia).getDay();
+    const esDominicalFestivo = reg.tipo==="domingo"; // el tipo registrado manda, no el día de la semana calculado
     reg.detalle.forEach(d=>{
       if(!heMap[d.nombre]) heMap[d.nombre]={horas:0,valor:0,diurnas:0,dominicales:0};
       if(!heDias[d.nombre]) heDias[d.nombre]={};
       heMap[d.nombre].horas += d.horas;
       heMap[d.nombre].valor += d.valor;
-      if(dow===0) heMap[d.nombre].dominicales += d.horas;
-      else        heMap[d.nombre].diurnas     += d.horas;
+      if(esDominicalFestivo) heMap[d.nombre].dominicales += d.horas;
+      else                   heMap[d.nombre].diurnas     += d.horas;
       heDias[d.nombre][dia] = (heDias[d.nombre][dia]||0) + d.horas;
     });
   });
