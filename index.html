@@ -2609,6 +2609,59 @@ function cambiarMesNomina(v){
   _nominaMesSel = v;
   irTab("nomina");
 }
+function diasIncapacidadADescontar(fechas){
+  if(fechas.length===0) return 0;
+  const orden=fechas.slice().sort((a,b)=>a-b);
+  let descontados=0, largoRacha=1;
+  for(let i=1;i<orden.length;i++){
+    const diff=Math.round((orden[i]-orden[i-1])/86400000);
+    if(diff===1) largoRacha++;
+    else { if(largoRacha>2) descontados+=(largoRacha-2); largoRacha=1; }
+  }
+  if(largoRacha>2) descontados+=(largoRacha-2);
+  return descontados;
+}
+// Construye diasMap + incapFechas a partir del historial de asistencia ya filtrado por mes
+function construirDiasMap(hist, personal){
+  const diasMap={}, incapFechas={};
+  personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0,novedades:[]}; incapFechas[p.nombre]=[]; });
+  hist.forEach(reg=>{
+    reg.filas.forEach(f=>{
+      if(!diasMap[f.nombre]) return;
+      if(f.estado==="Presente") diasMap[f.nombre].presentes++;
+      else {
+        diasMap[f.nombre].ausentes++;
+        if(f.novedad) diasMap[f.nombre].novedades.push(f.novedad);
+        if(f.novedad==="Incapacidad médica"){
+          const [dd,mm,yyyy]=reg.fecha.split("/").map(Number);
+          if(dd&&mm&&yyyy) incapFechas[f.nombre].push(new Date(yyyy,mm-1,dd));
+        }
+      }
+    });
+  });
+  return {diasMap, incapFechas};
+}
+// Días base a pagar: 30 por defecto, menos ausencias sin justificar e incapacidad >2 días.
+// Permiso aprobado, accidente de trabajo y llegada tarde NO descuentan (se pagan normal).
+// Si el trabajador ingresó dentro de este mes, se limita proporcionalmente desde su fecha de ingreso.
+function diasAPagar(p, diasMap, incapFechas, anioM, mesM){
+  const nov=diasMap[p.nombre]?.novedades||[];
+  const diasInjust=nov.filter(n=>n==="Ausencia sin justificación").length;
+  const diasIncap=diasIncapacidadADescontar(incapFechas[p.nombre]||[]);
+  let dias=30-diasInjust-diasIncap;
+  if(p.fechaIngreso){
+    const ing=new Date(p.fechaIngreso);
+    const inicioMes=new Date(anioM,mesM-1,1), finMes=new Date(anioM,mesM,0);
+    if(ing>=inicioMes && ing<=finMes){
+      const diasCorridosMes=finMes.getDate();
+      const diasDesdeIngreso=diasCorridosMes-ing.getDate()+1;
+      const proporcional=Math.round(30*diasDesdeIngreso/diasCorridosMes);
+      dias=Math.min(dias,proporcional);
+    }
+  }
+  return Math.max(0,dias);
+}
+
 function heEsPreliminar(h){ return h.estado!=="aprobado"; }
 
 async function nominaSincronizarDesdeAirtable(){
@@ -2649,18 +2702,8 @@ function renderNomina(){
   const SMMLV=1750905, AUX_T=249095;
 
   // Calcular días por trabajador desde historial (solo del mes seleccionado)
-  const diasMap={};
-  personal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0,novedades:[]}; });
-  hist.forEach(reg=>{
-    reg.filas.forEach(f=>{
-      if(!diasMap[f.nombre]) return;
-      if(f.estado==="Presente") diasMap[f.nombre].presentes++;
-      else {
-        diasMap[f.nombre].ausentes++;
-        if(f.novedad) diasMap[f.nombre].novedades.push(f.novedad);
-      }
-    });
-  });
+  const ANIO_M=parseInt(_nominaMesSel.split("-")[0]), MES_M=parseInt(_nominaMesSel.split("-")[1]);
+  const {diasMap, incapFechas} = construirDiasMap(hist, personal);
 
   // Calcular HE por trabajador (incluye preliminares — ver heParaLiquidar)
   const heMap={};
@@ -2678,7 +2721,7 @@ function renderNomina(){
 
   const filas=personal.map((p,i)=>{
     const dias=diasMap[p.nombre]||{presentes:0,ausentes:0};
-    const d=dias.presentes||0;
+    const d=diasAPagar(p, diasMap, incapFechas, ANIO_M, MES_M);
     const aux=p.salario<=2*SMMLV?AUX_T:0;
     const salProp=Math.round(p.salario*d/30);
     const auxProp=Math.round(aux*d/30);
@@ -2704,7 +2747,7 @@ function renderNomina(){
 
   const totPresentes=personal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0);
   const totNeto=personal.reduce((p2,p)=>{
-    const d=diasMap[p.nombre]?.presentes||0;
+    const d=diasAPagar(p, diasMap, incapFechas, ANIO_M, MES_M);
     const aux=p.salario<=2*SMMLV?AUX_T:0;
     const salProp=Math.round(p.salario*d/30);
     const auxProp=Math.round(aux*d/30);
@@ -2739,7 +2782,7 @@ function renderNomina(){
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Trabajador</th><th>Días trab.</th><th>Días aus.</th>
+          <th>Trabajador</th><th>Días a pagar</th><th>Días aus. (reg.)</th>
           <th>Sal. prop.</th><th>Aux. transp.</th><th>Horas extras</th>
           <th>Total devengado</th><th>Deducciones (8%)</th><th>Neto a pagar</th>
         </tr></thead>
@@ -2795,16 +2838,8 @@ async function exportarNominaExcel(){
   const hayPreliminaresExport = heAprobadas.some(h=>heEsPreliminar(h));
   const SMMLV = 1750905, AUX_T = 249095;
 
-  // ── Calcular días presentes por trabajador desde historial ──
-  const diasMap = {};
-  todoPersonal.forEach(p=>{ diasMap[p.nombre]={presentes:0,ausentes:0}; });
-  hist.forEach(reg=>{
-    reg.filas.forEach(f=>{
-      if(!diasMap[f.nombre]) return;
-      if(f.estado==="Presente") diasMap[f.nombre].presentes++;
-      else diasMap[f.nombre].ausentes++;
-    });
-  });
+  // ── Calcular días por trabajador desde historial (incluye novedades para el descuento correcto) ──
+  const {diasMap, incapFechas} = construirDiasMap(hist, todoPersonal);
 
   // ── Calcular HE por trabajador y por día ──
   const heMap  = {}; // nombre → {horas, valor, diurnas, dominicales, porDia:{}}
@@ -2843,7 +2878,7 @@ async function exportarNominaExcel(){
   nomData.push(["NOMBRE EMPLEADO","CARGO","C.C.","INICIO LABORES","RETIRO","SALARIO BÁSICO","DÍAS LIQ.","SALARIO DEVENGADO","AUXILIO TRANSP.","BONIFICACIÓN","TOTAL DEVENGADO","SALUD (4%)","PENSIÓN (4%)","NÓMINA DEDUCIBLE"]);
 
   todoPersonal.forEach(p=>{
-    const d      = diasMap[p.nombre]?.presentes || 0;
+    const d      = diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM);
     const sal    = p.salario;
     const aux    = sal <= 2*SMMLV ? AUX_T : 0;
     const salProp = Math.round(sal*d/30);
@@ -2865,10 +2900,10 @@ async function exportarNominaExcel(){
   const ff = fi + todoPersonal.length - 1;
   nomData.push(["TOTALES","","","","",
     todoPersonal.reduce((s,p)=>s+p.salario,0),
-    todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0),
+    todoPersonal.reduce((s,p)=>s+(diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM)),0),
     ...["H","I","J","K","L","M","N"].map((_,i)=>
       todoPersonal.reduce((s,p,pi)=>{
-        const d=diasMap[p.nombre]?.presentes||0, sal=p.salario;
+        const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM), sal=p.salario;
         const aux=sal<=2*SMMLV?AUX_T:0;
         const salProp=Math.round(sal*d/30), auxProp=Math.round(aux*d/30);
         const totDev=salProp+auxProp, salud=Math.round(salProp*0.04), pension=Math.round(salProp*0.04);
@@ -2965,7 +3000,7 @@ async function exportarNominaExcel(){
     ["TRABAJADOR","CARGO","SAL. PROPORCIONAL","DÍAS","BASE APORTES","SALUD (8.5%)","PENSIÓN (12%)","ARL (6.96%)","CCF (4%)","TOTAL EMPLEADOR"]
   ];
   todoPersonal.forEach(p=>{
-    const d    = diasMap[p.nombre]?.presentes||0;
+    const d    = diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM);
     const sal  = p.salario;
     const salProp = Math.round(sal*d/30);
     const base    = salProp;
@@ -2995,7 +3030,7 @@ async function exportarNominaExcel(){
     ["TRABAJADOR","CARGO","DÍAS TRAB.","DÍAS AUS.","NÓM. DEDUCIBLE","HRS EXTRAS","VR HRS EXTRAS","PARAFISCALES","COSTO TOTAL EMPLEADOR","ESTADO"]
   ];
   todoPersonal.forEach(p=>{
-    const d      = diasMap[p.nombre]?.presentes||0;
+    const d      = diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM);
     const aus    = diasMap[p.nombre]?.ausentes||0;
     const sal    = p.salario;
     const aux    = sal<=2*SMMLV?AUX_T:0;
@@ -3019,13 +3054,13 @@ async function exportarNominaExcel(){
   ];
   // insertamos en posiciones correctas
   const rsTotRow = ["TOTALES","",
-    todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.presentes||0),0),
+    todoPersonal.reduce((s,p)=>s+(diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM)),0),
     todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.ausentes||0),0),
-    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0;const sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08);return s+(td-ded);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0;const sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08);return s+(td-ded);},0),
     Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.horas||0),0)*10)/10,
     todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.valor||0),0),
-    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,sp=Math.round(sal*d/30);return s+Math.round(sp*0.2466);},0),
-    todoPersonal.reduce((s,p)=>{const d=diasMap[p.nombre]?.presentes||0,sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0,sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08),neto=td-ded,he=heMap[p.nombre]||{valor:0},base=sp,paraf=Math.round(base*0.2466);return s+(neto+he.valor+paraf);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,sp=Math.round(sal*d/30);return s+Math.round(sp*0.2466);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0,sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08),neto=td-ded,he=heMap[p.nombre]||{valor:0},base=sp,paraf=Math.round(base*0.2466);return s+(neto+he.valor+paraf);},0),
     "Total: "+todoPersonal.length
   ];
   rsData.push(rsTotRow);
