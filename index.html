@@ -1842,14 +1842,16 @@ function horaADecimal(str){
 // Calcula recargo según tipo de día y hora
 function calcularRecargo(tipo, horaInicio, horaFin){
   // tipo: "semana" | "sabado" | "domingo"
+  // Vigente desde jul-2026: jornada nocturna desde 7pm (Ley 2466/2025, art.160 CST),
+  // recargo dominical/festivo 90% (Ley 2466/2025, art.14), jornada 42h/semana (Ley 2101/2021)
   const hrs = horaFin - horaInicio;
   if(hrs<=0) return {horas:0, pct:0, tipo_recargo:""};
 
   let pct=0, tipo_recargo="", horasExtra=hrs;
+  const corte=19; // 7:00 p.m.
 
   if(tipo==="semana"){
-    // Extra diurna: 4:00 PM - 9 PM → 25% | Extra nocturna: después 9 PM → 75%
-    const corte=21;
+    // Extra diurna: hasta 7pm → 25% | Extra nocturna: desde 7pm → 75%
     if(horaInicio>=corte){ pct=0.75; tipo_recargo="Extra nocturna (75%)"; }
     else if(horaFin<=corte){ pct=0.25; tipo_recargo="Extra diurna (25%)"; }
     else{
@@ -1860,22 +1862,22 @@ function calcularRecargo(tipo, horaInicio, horaFin){
     }
   } else if(tipo==="sabado"){
     // Jornada normal sábado: 7:30 AM - 12:00 M
-    // Solo es extra lo que supere las 12:00 M
+    // Solo es extra lo que supere las 12:00 M. Se toma siempre como hora diurna (25%).
     const finNormal=HORA_FIN_SABADO; // 11.5
     const inicioExtra=Math.max(horaInicio, finNormal);
     horasExtra=horaFin-inicioExtra;
     if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:30-12:00)"};
-    pct=0.75; tipo_recargo="Extra sábado (75%)";
+    pct=0.25; tipo_recargo="Extra sábado (25%)";
   } else if(tipo==="domingo"){
-    const corte=21;
-    if(horaFin<=corte){ pct=0.75; tipo_recargo="Dominical diurno (75%)"; }
-    else { pct=1.10; tipo_recargo="Dominical nocturno (110%)"; }
+    // Recargo dominical/festivo (90%) + extra diurna (25%) o nocturna (75%)
+    if(horaFin<=corte){ pct=1.15; tipo_recargo="Dominical/festivo diurno (115%)"; }
+    else { pct=1.65; tipo_recargo="Dominical/festivo nocturno (165%)"; }
   }
   return {horas:Math.round(horasExtra*100)/100, pct, tipo_recargo};
 }
 
 function calcularValorHE(salario, horas, pct){
-  const valorHora = salario/240; // 30 días x 8 horas
+  const valorHora = salario/210; // jornada 42h/semana (210 h/mes) — Ley 2101 de 2021, vigente desde 15/07/2026
   return Math.round(valorHora*(1+pct)*horas);
 }
 
@@ -2961,8 +2963,8 @@ async function exportarNominaExcel(){
   const heData = [heHeader1, heHeader2];
   todoPersonal.forEach(p=>{
     const sal = p.salario;
-    const vrDiurna    = Math.round((sal/240)*1.25);
-    const vrDominical = Math.round((sal/240)*1.75);
+    const vrDiurna    = Math.round((sal/210)*1.25); // referencia: hora extra diurna (25%)
+    const vrDominical = Math.round((sal/210)*2.15); // referencia: hora extra diurna dominical/festiva (90%+25%)
     const he   = heMap[p.nombre]||{horas:0,valor:0,diurnas:0,dominicales:0};
     const dias_he = heDias[p.nombre]||{};
     const fila = [p.nombre, p.cargo];
@@ -2975,7 +2977,7 @@ async function exportarNominaExcel(){
       Math.round(he.dominicales*10)/10,
       vrDiurna,
       vrDominical,
-      Math.round(he.diurnas*vrDiurna + he.dominicales*vrDominical)
+      he.valor // valor real calculado por cada registro (respeta diurno/nocturno/mixto exacto), no una tarifa plana
     );
     heData.push(fila);
   });
@@ -2990,11 +2992,7 @@ async function exportarNominaExcel(){
     Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.diurnas||0),0)*10)/10,
     Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.dominicales||0),0)*10)/10,
     "—","—",
-    todoPersonal.reduce((s,p)=>{
-      const he=heMap[p.nombre]||{diurnas:0,dominicales:0};
-      const sal=p.salario;
-      return s+Math.round(he.diurnas*(sal/240)*1.25+he.dominicales*(sal/240)*1.75);
-    },0)
+    todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.valor||0),0)
   );
   heData.push(totFila);
   if(hayPreliminaresExport){
