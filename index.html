@@ -626,6 +626,58 @@ function guardarATProxyVinc(){
   irTab("vinculacion");
 }
 
+// ── Personal: sincronización con Airtable (estado activo/inactivo entre dispositivos) ──
+function mapearPersonalAT(rec){
+  const f = rec.fields || {};
+  let datos={};
+  try{ datos = JSON.parse(f.Datos||"{}"); }catch(e){}
+  return {
+    id: parseInt(f.AppId,10) || datos.id || Date.now(),
+    nombre: f.Nombre || datos.nombre || "",
+    activo: !!f.Activo,
+    cargo: datos.cargo, cedula: datos.cedula, salario: datos.salario,
+    fechaIngreso: datos.fechaIngreso, eps: datos.eps, pension: datos.pension,
+    arl: datos.arl, ccf: datos.ccf
+  };
+}
+async function personalSincronizarUno(p){
+  if(!getATProxyURL()) return;
+  try{
+    await atProxyCall({accion:"guardarPersonal", registro:{
+      id: p.id, nombre: p.nombre, activo: p.activo,
+      datosCompletos: {id:p.id, nombre:p.nombre, cargo:p.cargo, cedula:p.cedula,
+        salario:p.salario, fechaIngreso:p.fechaIngreso, eps:p.eps, pension:p.pension,
+        arl:p.arl, ccf:p.ccf}
+    }});
+  }catch(e){ alert("⚠️ No se pudo sincronizar el personal con Airtable: "+e.message+"\nEl cambio quedó guardado localmente."); }
+}
+let _personalAutoSyncEnCurso=false;
+async function personalAutoSync(){
+  if(!getATProxyURL()||_personalAutoSyncEnCurso) return;
+  _personalAutoSyncEnCurso=true;
+  try{
+    const data = await atProxyCall({accion:"leerPersonal"});
+    const remotos = (data.registros||[]).map(mapearPersonalAT);
+    if(remotos.length>0){
+      const local = getPersonal();
+      // Para personal base (id<=24): solo tomar el estado "activo" de Airtable (los datos
+      // maestros siguen viniendo del código). Para nuevos (id>24): tomar el registro completo.
+      const merged = local.map(p=>{
+        const r = remotos.find(x=>x.id===p.id);
+        if(!r) return p;
+        return p.id<=24 ? {...p, activo:r.activo} : {...p, ...r};
+      });
+      // Agregar los que existan en Airtable pero no localmente todavía (altas hechas en otro dispositivo)
+      remotos.forEach(r=>{
+        if(r.id>24 && !merged.some(p=>p.id===r.id)) merged.push(r);
+      });
+      setPersonal(merged);
+    }
+    if(tabActual) irTab(tabActual);
+  }catch(e){ /* silencioso: si falla, se queda con la última copia local conocida */ }
+  _personalAutoSyncEnCurso=false;
+}
+
 // ══════════════════════════════════════════════════
 // PIN
 // ══════════════════════════════════════════════════
@@ -714,15 +766,15 @@ function irTab(id){
   const btn=document.getElementById("tab-btn-"+id);
   if(btn) btn.classList.add("activo");
   const c=document.getElementById("mainContent");
-  if(id==="asistencia")           c.innerHTML=renderAsistencia();
+  if(id==="asistencia")           { c.innerHTML=renderAsistencia(); personalAutoSync(); }
   else if(id==="asistencia_ro")   c.innerHTML=renderAsistenciaRO();
   else if(id==="calendario")      abrirCalendarioAsistencia();
-  else if(id==="vinculacion")     { c.innerHTML=renderVinculacion(); vincAutoSync(); }
+  else if(id==="vinculacion")     { c.innerHTML=renderVinculacion(); vincAutoSync(); personalAutoSync(); }
   else if(id==="horas_extras")    { c.innerHTML=renderHorasExtras(); heAutoSync(); }
   else if(id==="horas_extras_con"){ c.innerHTML=renderHorasExtrasCon(); heAutoSync(); }
-  else if(id==="resumen")         c.innerHTML=renderResumen();
-  else if(id==="nomina")          c.innerHTML=renderNomina();
-  else if(id==="personal_con")    c.innerHTML=renderPersonalCon();
+  else if(id==="resumen")         { c.innerHTML=renderResumen(); personalAutoSync(); }
+  else if(id==="nomina")          { c.innerHTML=renderNomina(); personalAutoSync(); }
+  else if(id==="personal_con")    { c.innerHTML=renderPersonalCon(); personalAutoSync(); }
   else if(id==="seguridad")       c.innerHTML=renderSeguridad();
 }
 
@@ -931,6 +983,7 @@ async function enviarAsistencia(){
   if(retiros.length>0){
     const personal=getPersonal();
     const histRetiros=getRetiros();
+    const afectados=[];
     retiros.forEach(f=>{
       const idx=personal.findIndex(p=>p.nombre===f.nombre&&p.activo);
       const yaTieneRetiroPendiente=histRetiros.some(r=>r.nombre===f.nombre);
@@ -946,10 +999,12 @@ async function enviarAsistencia(){
         });
         personal[idx].activo=false;
         delete estadoAsis[personal[idx].id];
+        afectados.push(personal[idx]);
       }
     });
     setPersonal(personal);
     setRetiros(histRetiros);
+    afectados.forEach(p=>personalSincronizarUno(p));
   }
   // Guardar en historial de asistencia (respaldo local)
   const hist=getAsistenciaHist();
@@ -1253,6 +1308,7 @@ async function guardarCorreccion(fecha){
   const personal=getPersonal();
   const histRetiros=getRetiros();
   let huboRetiro=false;
+  const afectadosRetiro=[];
   filasNuevas.forEach(f=>{
     const tipo=NOVEDADES_TIPOS.find(n=>n.label===f.novedad);
     if(tipo?.retiro){
@@ -1271,10 +1327,11 @@ async function guardarCorreccion(fecha){
         personal[pIdx].activo=false;
         delete estadoAsis[personal[pIdx].id];
         huboRetiro=true;
+        afectadosRetiro.push(personal[pIdx]);
       }
     }
   });
-  if(huboRetiro){ setPersonal(personal); setRetiros(histRetiros); }
+  if(huboRetiro){ setPersonal(personal); setRetiros(histRetiros); afectadosRetiro.forEach(p=>personalSincronizarUno(p)); }
 
   mostrarOk("✅ Corrección guardada",mensajeAT+(huboRetiro?" El trabajador quedó desactivado del sistema y Finanzas debe ser notificado.":""),
     `<div class="ok-row"><span class="l">Motivo</span><span>${motivo}</span></div>
@@ -1574,13 +1631,15 @@ function vincFinalizarInduccion(id){
   emp.linkInduccion=link;
   emp.fechaEfectivaIngreso=fechaEf;
   const personal=getPersonal();
-  personal.push({id:Date.now(),nombre:emp.nombre,cargo:emp.cargo,cedula:emp.cedula,
+  const nuevoEmpleado={id:Date.now(),nombre:emp.nombre,cargo:emp.cargo,cedula:emp.cedula,
     salario:emp.salario,fechaIngreso:fechaEf,
     eps:emp.datos?.eps||"—",pension:emp.datos?.pension||"—",
-    arl:emp.datos?.arl||"Positiva",ccf:emp.datos?.ccf||"Comfaboy",activo:true});
+    arl:emp.datos?.arl||"Positiva",ccf:emp.datos?.ccf||"Comfaboy",activo:true};
+  personal.push(nuevoEmpleado);
   setPersonal(personal);
   setPendientes(pend.filter(p=>p.id!==id));
   vincEliminarUno(id);
+  personalSincronizarUno(nuevoEmpleado);
   estadoAsis[personal[personal.length-1].id]={presente:null,novedad:null,obs:""};
   alert(`🎉 ${emp.nombre} activado en el sistema de nómina, efectivo desde ${fechaEf}.`);
   irTab("vinculacion");
@@ -1659,7 +1718,14 @@ function renderResumen(){
     </table></div>
   </div>` : "";
 
+  const personalSyncBanner = getATProxyURL() ? `
+    <div class="alert alert-info" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>📡 Personal conectado a Airtable</span>
+      <button class="btn btn-sm" onclick="personalAutoSync()">🔄 Sincronizar ahora</button>
+    </div>` : "";
+
   return `
+  ${personalSyncBanner}
   ${alertaRetiros}
   ${alertaHE}
   <div class="alert alert-warn">📌 Los días trabajados se ingresan al Excel de nómina. Este resumen muestra el cálculo base para un mes completo (30 días).</div>
