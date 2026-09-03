@@ -347,6 +347,11 @@ const PERSONAL = [
   {id:22, nombre:"Luz Angelica Molina Chaparro",     cedula:"1057598470", cargo:"Aux. Topográfico",       salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"17/07/2026", activo:true},
   {id:23, nombre:"Ronal Dayan Pinto Romero",         cedula:"1007751499", cargo:"Operador de Maquinaria", salario:1750905, eps:"Sanitas",    pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"27/07/2026", activo:true},
   {id:24, nombre:"Miguel Ángel Chaparro Diaz",       cedula:"1057588631", cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"27/07/2026", activo:true},
+  {id:25, nombre:"Cristian Fernando Mendivelso Gil", cedula:"1054252811", cargo:"Operador de Maquinaria", salario:1750905, eps:"Sanitas",    pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/09/2026", activo:true},
+  {id:26, nombre:"José Alveiro Martínez Lizarazo",   cedula:"4194052",    cargo:"Oficial",                salario:2400000, eps:"Famisanar",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/09/2026", activo:true},
+  {id:27, nombre:"Jose Alberto Vargas Perez",        cedula:"1052359056", cargo:"Oficial",                salario:2400000, eps:"Famisanar",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/09/2026", activo:true},
+  {id:28, nombre:"Jose Guillermo Ramos Jimenez",     cedula:"79250862",   cargo:"Oficial",                salario:2400000, eps:"Salud Total", pension:"Colpensiones",arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/09/2026", activo:true},
+  {id:29, nombre:"Luis Enrique Matoma Tique",        cedula:"93443670",   cargo:"Auxiliar Operativo",     salario:1750905, eps:"Salud Total", pension:"Colfondo",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/09/2026", activo:true},
 ];
 
 const NOVEDADES_TIPOS = [
@@ -360,6 +365,7 @@ const NOVEDADES_TIPOS = [
   {id:"fin_obra",      icon:"🏗️", label:"Fin de la obra / labor",        retiro:true},
 ];
 
+const ID_MAX_BASE   = Math.max(...PERSONAL.map(p=>p.id)); // último id del personal "de código" — los nuevos vinculados siempre tendrán id mayor a este
 const LS_RETIROS    = "nom_retiros";
 const LS_PERSONAL   = "nom_personal";
 const LS_PENDIENTES = "nom_pendientes";
@@ -392,9 +398,9 @@ function getPersonal(){
   // y (b) el estado "activo" del personal base cuando se retira (id 1-24)
   const local = localStorage.getItem(LS_PERSONAL);
   const guardado = local ? JSON.parse(local) : [];
-  const nuevosVinculados = guardado.filter(p=>p.id>24);
+  const nuevosVinculados = guardado.filter(p=>p.id>ID_MAX_BASE);
   const overridesBase = {};
-  guardado.filter(p=>p.id<=24).forEach(p=>{ overridesBase[p.id]=p.activo; });
+  guardado.filter(p=>p.id<=ID_MAX_BASE).forEach(p=>{ overridesBase[p.id]=p.activo; });
   const base = JSON.parse(JSON.stringify(PERSONAL)).map(p=>
     (p.id in overridesBase) ? {...p, activo:overridesBase[p.id]} : p
   );
@@ -404,8 +410,8 @@ function setPersonal(p){
   // Nuevos vinculados (id > 24): se guardan completos
   // Personal base (id 1-24): solo se guarda el estado "activo" (para permitir retiros
   // sin perder ni sobrescribir sus datos maestros, que siempre vienen del código)
-  const nuevos = p.filter(x=>x.id>24);
-  const overridesBase = p.filter(x=>x.id<=24).map(x=>({id:x.id, activo:x.activo}));
+  const nuevos = p.filter(x=>x.id>ID_MAX_BASE);
+  const overridesBase = p.filter(x=>x.id<=ID_MAX_BASE).map(x=>({id:x.id, activo:x.activo}));
   localStorage.setItem(LS_PERSONAL, JSON.stringify(nuevos.concat(overridesBase)));
 }
 function getPendientes(){
@@ -665,11 +671,11 @@ async function personalAutoSync(){
       const merged = local.map(p=>{
         const r = remotos.find(x=>x.id===p.id);
         if(!r) return p;
-        return p.id<=24 ? {...p, activo:r.activo} : {...p, ...r};
+        return p.id<=ID_MAX_BASE ? {...p, activo:r.activo} : {...p, ...r};
       });
       // Agregar los que existan en Airtable pero no localmente todavía (altas hechas en otro dispositivo)
       remotos.forEach(r=>{
-        if(r.id>24 && !merged.some(p=>p.id===r.id)) merged.push(r);
+        if(r.id>ID_MAX_BASE && !merged.some(p=>p.id===r.id)) merged.push(r);
       });
       setPersonal(merged);
     }
@@ -754,7 +760,7 @@ function renderTabs(){
 // Constantes jornada
 const HORA_INICIO_JORNADA = 7.5;  // 7:30 AM
 const HORA_FIN_JORNADA    = 16.0; // 4:00 PM entre semana (desde 15/jul/2026 — Ley reducción jornada)
-const HORA_FIN_SABADO     = 12.0; // 12:00 M sábado (desde 15/jul/2026 — Ley reducción jornada)
+const HORA_FIN_SABADO     = 11.5; // 11:30 a.m. sábado (nuevo horario de obra, antes 12:00 m)
 const LS_HORAS = "nom_horas_extras";
 
 function getHorasExtras(){ const s=localStorage.getItem(LS_HORAS); return s?JSON.parse(s):[]; }
@@ -1927,12 +1933,12 @@ function calcularRecargo(tipo, horaInicio, horaFin){
       tipo_recargo="Extra mixta (diurna+nocturna)";
     }
   } else if(tipo==="sabado"){
-    // Jornada normal sábado: 7:30 AM - 12:00 M
+    // Jornada normal sábado: 7:00 AM - 11:30 AM
     // Solo es extra lo que supere las 12:00 M. Se toma siempre como hora diurna (25%).
     const finNormal=HORA_FIN_SABADO; // 11.5
     const inicioExtra=Math.max(horaInicio, finNormal);
     horasExtra=horaFin-inicioExtra;
-    if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:30-12:00)"};
+    if(horasExtra<=0) return {horas:0, pct:0, tipo_recargo:"Dentro de jornada normal sábado (7:00-11:30)"};
     pct=0.25; tipo_recargo="Extra sábado (25%)";
   } else if(tipo==="domingo"){
     // Recargo dominical/festivo (90%) + extra diurna (25%) o nocturna (75%)
@@ -2322,8 +2328,8 @@ function heActualizarTipo(v){
     if(inputIni) inputIni.value="16:00";
     if(inputFin) inputFin.value="17:00";
   } else if(v==="sabado"){
-    if(inputIni) inputIni.value="12:00";
-    if(inputFin) inputFin.value="13:00";
+    if(inputIni) inputIni.value="11:30";
+    if(inputFin) inputFin.value="12:30";
   } else { // domingo
     if(inputIni) inputIni.value="07:30";
     if(inputFin) inputFin.value="15:30";
