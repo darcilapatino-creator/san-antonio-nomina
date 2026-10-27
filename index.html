@@ -639,9 +639,16 @@ function mapearPersonalAT(rec){
   const f = rec.fields || {};
   let datos={};
   try{ datos = JSON.parse(f.Datos||"{}"); }catch(e){}
+  const idNum = parseInt(f.AppId,10);
+  const id = Number.isFinite(idNum) ? idNum : (Number.isFinite(datos.id) ? datos.id : null);
+  const nombre = f.Nombre || datos.nombre || "";
+  // Registro sin id identificable o sin nombre: está corrupto/incompleto, se ignora.
+  // (Antes se usaba Date.now() como id de respaldo, lo que generaba un "fantasma" nuevo
+  // cada vez que se sincronizaba — por eso se ignora en vez de inventar un id aleatorio.)
+  if(id===null || !nombre) return null;
   return {
-    id: parseInt(f.AppId,10) || datos.id || Date.now(),
-    nombre: f.Nombre || datos.nombre || "",
+    id,
+    nombre,
     activo: !!f.Activo,
     cargo: datos.cargo, cedula: datos.cedula, salario: datos.salario,
     fechaIngreso: datos.fechaIngreso, fechaRetiro: datos.fechaRetiro, eps: datos.eps, pension: datos.pension,
@@ -665,7 +672,7 @@ async function personalAutoSync(){
   _personalAutoSyncEnCurso=true;
   try{
     const data = await atProxyCall({accion:"leerPersonal"});
-    const remotos = (data.registros||[]).map(mapearPersonalAT);
+    const remotos = (data.registros||[]).map(mapearPersonalAT).filter(Boolean);
     if(remotos.length>0){
       const local = getPersonal();
       // Para personal base (id<=24): solo tomar el estado "activo" de Airtable (los datos
@@ -2931,7 +2938,7 @@ async function exportarNominaExcel(modoProyeccion){
     document.getElementById("overlayLoad").classList.remove("vis");
   }
 
-  const todoPersonal = getPersonal(); // incluye retirados
+  const todoPersonal = getPersonal().filter(p=>p.nombre); // incluye retirados, excluye registros corruptos sin nombre
   const hoy=new Date();
   if(!_nominaMesSel) _nominaMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
   const ANIO_NUM = parseInt(_nominaMesSel.split("-")[0]);
