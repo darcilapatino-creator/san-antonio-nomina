@@ -1118,9 +1118,33 @@ function cambiarMesCalendario(v){
 function renderCalendarioAsistencia(hist, histHE){
   const [anio,mes] = _calMesSel.split("-").map(Number);
   const diasEnMes = new Date(anio, mes, 0).getDate();
-  const activos = getPersonal().filter(p=>p.activo);
   const porFecha = {};
   hist.forEach(r=>{ porFecha[r.fecha]=r; });
+  // Se muestran los activos y también quienes ya se retiraron pero estuvieron en el mes consultado
+  // (por consulta de asistencia y horas extras), sin importar si hoy están inactivos.
+  const inicioMesCal = new Date(anio, mes-1, 1), finMesCal = new Date(anio, mes, 0);
+  const nombresConRegistro = new Set();
+  hist.forEach(r=>{
+    const partes = (r.fecha||"").split("/");
+    if(partes.length===3 && Number(partes[1])===mes && Number(partes[2])===anio){
+      (r.filas||[]).forEach(f=>nombresConRegistro.add(f.nombre));
+    }
+  });
+  (histHE||[]).forEach(r=>{
+    const partes = (r.fecha||"").split("-");
+    if(partes.length===3 && Number(partes[1])===mes && Number(partes[0])===anio){
+      (r.detalle||[]).forEach(d=>nombresConRegistro.add(d.nombre));
+    }
+  });
+  const activos = getPersonal().filter(p=>{
+    if(!p.nombre) return false;
+    if(p.activo) return true;
+    const ret = parsearFechaFlexible(p.fechaRetiro);
+    const ing = parsearFechaFlexible(p.fechaIngreso);
+    if(ing && ing>finMesCal) return false;
+    if(ret && ret>=inicioMesCal) return true;
+    return nombresConRegistro.has(p.nombre);
+  });
   const heByFechaNombre = {};
   (histHE||[]).forEach(r=>{
     (r.detalle||[]).forEach(d=>{ heByFechaNombre[r.fecha+"|"+d.nombre]=true; });
@@ -1152,7 +1176,7 @@ function renderCalendarioAsistencia(hist, histHE){
       const borde = tieneHE ? "border:2px solid #7c3aed;box-sizing:border-box;" : "";
       return `<td style="padding:0;text-align:center"><div title="${titulo}" style="width:16px;height:16px;background:${color};border-radius:3px;margin:1px auto;${borde}"></div></td>`;
     }).join("");
-    return `<tr><td style="position:sticky;left:0;background:var(--white);white-space:nowrap;padding:4px 8px;font-size:11px;border-right:1px solid var(--gray3)">${p.nombre}</td>${celdas}</tr>`;
+    return `<tr><td style="position:sticky;left:0;background:var(--white);white-space:nowrap;padding:4px 8px;font-size:11px;border-right:1px solid var(--gray3)">${p.nombre}${p.activo?"":`<span style="color:var(--text3)"> · retirado${p.fechaRetiro?" "+p.fechaRetiro:""}</span>`}</td>${celdas}</tr>`;
   }).join("");
 
   const headerDias = diasCols.map(d=>`<th style="font-size:9px;padding:2px;font-weight:400;color:var(--text3)">${d}</th>`).join("");
