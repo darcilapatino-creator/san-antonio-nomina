@@ -3435,4 +3435,54 @@ async function exportarLiquidaciones(){
 }
 
 function obtenerMesNombre(){
-  const meses=["Enero","Febrero","Marzo","Abril","Mayo
+  const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  // Usa el mes que se está liquidando (no el mes actual) para que el encabezado sea correcto
+  if(typeof _nominaMesSel==="string" && /^\d{4}-\d{2}$/.test(_nominaMesSel)) return meses[parseInt(_nominaMesSel.split("-")[1])-1];
+  return meses[new Date().getMonth()];
+}
+
+function aplicarFormatoNomina(ws, nPersonal){
+  // Formatos numéricos para columnas de valores
+  const rango = nPersonal + 6;
+  for(let r=6; r<=rango; r++){
+    ["F","G","H","I","J","K","L","M","N"].forEach(col=>{
+      const ref = col+r;
+      if(ws[ref]) ws[ref].z = col==="G"?"0":'#,##0';
+    });
+  }
+}
+
+function aplicarFormatoHE(ws, nPersonal, diasMes){
+  const rango = nPersonal + 3;
+  for(let r=3; r<=rango; r++){
+    for(let c=3; c<=2+diasMes; c++){
+      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
+      if(ws[ref] && typeof ws[ref].v === "number") ws[ref].z = "0.#";
+    }
+    // Columnas de valor
+    [2+diasMes+4, 2+diasMes+5, 2+diasMes+6].forEach(c=>{
+      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
+      if(ws[ref]) ws[ref].z = '#,##0';
+    });
+  }
+}
+
+function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
+function getFechaISO(){
+  const h=new Date();
+  return `${h.getDate().toString().padStart(2,"0")}/${(h.getMonth()+1).toString().padStart(2,"0")}/${h.getFullYear()}`;
+}
+function mostrarOk(titulo,sub,detalle){
+  document.getElementById("okTitle").textContent=titulo;
+  document.getElementById("okSub").textContent=sub;
+  document.getElementById("okDetail").innerHTML=detalle;
+  document.getElementById("overlayOk").classList.add("vis");
+}
+function cerrarOverlayOk(){
+  document.getElementById("overlayOk").classList.remove("vis");
+  irTab(tabActual);
+}
+</script>
+</body>
+</html>
