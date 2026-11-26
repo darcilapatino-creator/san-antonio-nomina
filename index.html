@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nómina — San Antonio · CONSTRUCTHOR</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -3292,7 +3293,7 @@ async function exportarLiquidaciones(){
   const FMT_F="dd/mm/yyyy", FMT_M='"$" #,##0';
   const wb=XLSX.utils.book_new();
   const resumen=[["LIQUIDACIONES DE RETIRADOS — "+obtenerMesNombre().toUpperCase()+" "+ANIO_NUM+" · CONSTRUCTHOR S.A.S."],
-    ["TRABAJADOR","C.C.","RETIRO","DÍAS LIQ.","CESANTÍAS","INTERESES CES.","PRIMA","VACACIONES","TOTAL LIQUIDACIÓN","NÓMINA DEL MES","HORAS EXTRAS","TOTAL A PAGAR"]];
+    ["TRABAJADOR","C.C.","INGRESO","RETIRO","DÍAS LIQ.","CESANTÍAS","INTERESES CES.","PRIMA","VACACIONES","TOTAL LIQUIDACIÓN","NÓMINA DEL MES","HORAS EXTRAS","TOTAL A PAGAR"]];
   const hojas=[];
 
   retirados.forEach((p,idx)=>{
@@ -3363,22 +3364,53 @@ async function exportarLiquidaciones(){
     ws["!merges"]=["A1:I1","B3:I3","B5:E5","H5:I5","H6:I6","B8:E8","B9:E10","A12:B12","C34:E34","B47:I48","A55:I55","A56:J56"].map(r=>XLSX.utils.decode_range(r));
     let nombreHoja=(idx+1)+". "+p.nombre.replace(/[\[\]:*?\/\\]/g,"");
     nombreHoja=nombreHoja.slice(0,31);
+    ws["!margins"]={left:0.5,right:0.5,top:0.6,bottom:0.6,header:0.3,footer:0.3};
     hojas.push({ws,nombreHoja});
-    resumen.push([p.nombre,cc,p.fechaRetiro,diasUA,ces,intc,prima,vac,totLiq,nomina,he,total]);
+    resumen.push([p.nombre,cc,p.fechaIngreso||"",p.fechaRetiro,diasUA,ces,intc,prima,vac,totLiq,nomina,he,total]);
   });
 
-  const tot=["TOTALES","","",""];
-  for(let c=4;c<=11;c++) tot.push(resumen.slice(2).reduce((a,r)=>a+(r[c]||0),0));
+  const tot=["TOTALES","","","",""];
+  for(let c=5;c<=12;c++) tot.push(resumen.slice(2).reduce((a,r)=>a+(r[c]||0),0));
   resumen.push(tot);
   resumen.push([]);
   resumen.push(["Nota: horas extras = bonificación esporádica (no entran en la base de prestaciones). Nómina del mes = salario y auxilio hasta la fecha de retiro menos salud y pensión del trabajador."+(hayPrelim?" ⚠️ Incluye horas extras con aprobación preliminar (solo un director)":"")]);
   const wsR=XLSX.utils.aoa_to_sheet(resumen);
-  wsR["!cols"]=[{wch:34},{wch:13},{wch:12},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13},{wch:16},{wch:15},{wch:13},{wch:15}];
-  wsR["!merges"]=[XLSX.utils.decode_range("A1:L1")];
-  for(let r=2;r<resumen.length;r++) for(let c=4;c<=11;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(wsR[ref]&&typeof wsR[ref].v==="number") wsR[ref].z="#,##0"; }
+  wsR["!cols"]=[{wch:34},{wch:13},{wch:12},{wch:12},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13},{wch:16},{wch:15},{wch:13},{wch:15}];
+  wsR["!merges"]=[XLSX.utils.decode_range("A1:M1")];
+  for(let r=2;r<resumen.length;r++) for(let c=5;c<=12;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(wsR[ref]&&typeof wsR[ref].v==="number") wsR[ref].z="#,##0"; }
+  wsR["!margins"]={left:0.4,right:0.4,top:0.6,bottom:0.6,header:0.3,footer:0.3};
   XLSX.utils.book_append_sheet(wb,wsR,"Resumen");
   hojas.forEach(h=>XLSX.utils.book_append_sheet(wb,h.ws,h.nombreHoja));
-  XLSX.writeFile(wb,"Liquidaciones_Retirados_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx");
+  // Área de impresión: cada liquidación completa (hasta las firmas); el resumen entero
+  const nombresImp=[{Name:"_xlnm.Print_Area",Sheet:0,Ref:"Resumen!$A$1:$M$"+resumen.length}];
+  hojas.forEach((h,i)=>nombresImp.push({Name:"_xlnm.Print_Area",Sheet:i+1,Ref:"'"+h.nombreHoja.replace(/'/g,"''")+"'!$A$1:$J$68"}));
+  wb.Workbook={Names:nombresImp};
+  const nombreArchivo="Liquidaciones_Retirados_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx";
+  // SheetJS no escribe la configuración de página: se agrega al archivo (carta, ajustar a 1 página)
+  let blob=null;
+  try{
+    if(typeof JSZip==="undefined") throw new Error("JSZip no disponible");
+    const zip=await JSZip.loadAsync(XLSX.write(wb,{bookType:"xlsx",type:"array"}));
+    const archivos=Object.keys(zip.files).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n));
+    for(const n of archivos){
+      const esResumen = n.endsWith("sheet1.xml");
+      let xml=await zip.file(n).async("string");
+      xml=xml.replace(/(<worksheet[^>]*>)/,'$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+      const ps = esResumen
+        ? '<pageSetup paperSize="1" orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
+        : '<pageSetup paperSize="1" orientation="portrait" fitToWidth="1" fitToHeight="1"/>';
+      xml=xml.replace(/(<pageMargins[^>]*\/>)/,'$1'+ps);
+      zip.file(n,xml);
+    }
+    blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  }catch(e){ blob=null; }
+  if(blob){
+    const url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url; a.download=nombreArchivo; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+  } else {
+    XLSX.writeFile(wb,nombreArchivo); // sin configuración de impresión automática
+  }
 }
 
 function obtenerMesNombre(){
