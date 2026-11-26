@@ -2931,6 +2931,7 @@ function renderNomina(){
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="exportarNominaExcel()">📥 Descargar Excel nómina</button>
       ${rolActual.rol==="Finanzas"?`<button class="btn" style="background:#fef3c7;color:#92400e" onclick="exportarNominaExcel(true)">🔶 Descargar proyección (incluye HE sin aprobar)</button>`:""}
+      ${rolActual.rol==="Finanzas"?`<button class="btn" style="background:#e0f2fe;color:#075985" onclick="exportarLiquidaciones()">📄 Liquidaciones de retirados del mes</button>`:""}
       <button class="btn" onclick="irTab('resumen')">📊 Ver resumen</button>
     </div>
   </div>
@@ -3216,9 +3217,175 @@ async function exportarNominaExcel(modoProyeccion){
   XLSX.writeFile(wb, (modoProyeccion?"PROYECCION_":"")+"Nomina_SanAntonio_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx");
 }
 
+// ══════════════════════════════════════════════════
+// LIQUIDACIÓN DEFINITIVA DE PRESTACIONES (formato CONSTRUCTHOR)
+// Una hoja por trabajador retirado en el mes seleccionado + una hoja resumen.
+// Las horas extras NO hacen parte de la base (son bonificación esporádica): se pagan aparte.
+// ══════════════════════════════════════════════════
+function numeroALetras(n){
+  n = Math.round(n);
+  if(n===0) return "CERO";
+  const U=["","UN","DOS","TRES","CUATRO","CINCO","SEIS","SIETE","OCHO","NUEVE","DIEZ","ONCE","DOCE","TRECE","CATORCE","QUINCE","DIECISEIS","DIECISIETE","DIECIOCHO","DIECINUEVE","VEINTE","VEINTIUN","VEINTIDOS","VEINTITRES","VEINTICUATRO","VEINTICINCO","VEINTISEIS","VEINTISIETE","VEINTIOCHO","VEINTINUEVE"];
+  const D=["","","","TREINTA","CUARENTA","CINCUENTA","SESENTA","SETENTA","OCHENTA","NOVENTA"];
+  const C=["","CIENTO","DOSCIENTOS","TRESCIENTOS","CUATROCIENTOS","QUINIENTOS","SEISCIENTOS","SETECIENTOS","OCHOCIENTOS","NOVECIENTOS"];
+  const menos1000 = x=>{
+    if(x===100) return "CIEN";
+    const c=Math.floor(x/100), r=x%100, p=[];
+    if(c) p.push(C[c]);
+    if(r<30){ if(r) p.push(U[r]); }
+    else { const d=Math.floor(r/10), u=r%10; p.push(u?D[d]+" Y "+U[u]:D[d]); }
+    return p.join(" ");
+  };
+  const mill=Math.floor(n/1000000), mil=Math.floor((n%1000000)/1000), res=n%1000, p=[];
+  if(mill) p.push(mill===1?"UN MILLON":menos1000(mill)+" MILLONES");
+  if(mil)  p.push(mil===1?"MIL":menos1000(mil)+" MIL");
+  if(res)  p.push(res===1?"UNO":menos1000(res));
+  return p.join(" ");
+}
+
+// DAYS360 método US (el mismo de Excel)
+function days360US(a,b){
+  const ultFeb = f=>f.getMonth()===1 && f.getDate()===new Date(f.getFullYear(),2,0).getDate();
+  let d1=a.getDate(), d2=b.getDate();
+  if(ultFeb(a) && ultFeb(b)) d2=30;
+  if(ultFeb(a)) d1=30;
+  if(d2===31 && d1>=30) d2=30;
+  if(d1===31) d1=30;
+  return (b.getFullYear()-a.getFullYear())*360+(b.getMonth()-a.getMonth())*30+(d2-d1);
+}
+
+async function exportarLiquidaciones(){
+  if(typeof XLSX==="undefined"){ alert("La librería de Excel aún está cargando. Espere un momento e intente de nuevo."); return; }
+  if(getATProxyURL()){
+    document.getElementById("overlayLoad").classList.add("vis");
+    try{
+      const data = await atProxyCall({accion:"leerCalendario"});
+      setAsistenciaHist((data.registrosAsistencia||[]).map(mapearRegistroAT));
+      setHorasExtras((data.registrosHorasExtras||[]).map(mapearHorasExtrasAT));
+      _asisHistCache=null; _heHistCache=null;
+    }catch(e){
+      document.getElementById("overlayLoad").classList.remove("vis");
+      if(!confirm("⚠️ No se pudo traer los datos más recientes de Airtable ("+e.message+").\n\n¿Continuar con los datos guardados en este computador?")) return;
+    }
+    document.getElementById("overlayLoad").classList.remove("vis");
+  }
+  const hoy=new Date();
+  if(!_nominaMesSel) _nominaMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
+  const ANIO_NUM=parseInt(_nominaMesSel.split("-")[0]), MES_NUM=parseInt(_nominaMesSel.split("-")[1]);
+  const inicioMes=new Date(ANIO_NUM,MES_NUM-1,1), finMes=new Date(ANIO_NUM,MES_NUM,0);
+  const SMMLV=1750905, AUX_T=249095;
+  const todoPersonal=getPersonal().filter(p=>p.nombre);
+  const retirados=todoPersonal.filter(p=>{ const r=parsearFechaFlexible(p.fechaRetiro); return r && r>=inicioMes && r<=finMes; })
+    .sort((x,y)=>parsearFechaFlexible(x.fechaRetiro)-parsearFechaFlexible(y.fechaRetiro)||x.nombre.localeCompare(y.nombre));
+  if(retirados.length===0){ alert("No hay trabajadores con fecha de retiro dentro de "+obtenerMesNombre()+" "+ANIO_NUM+"."); return; }
+
+  const hist=getAsistenciaHist().filter(r=>{ const pt=(r.fecha||"").split("/"); return pt.length>=3 && (pt[2]+"-"+pt[1].padStart(2,"0"))===_nominaMesSel; });
+  const heTodas=getHorasExtras().filter(h=>(h.fecha||"").slice(0,7)===_nominaMesSel);
+  const heLiq=heParaLiquidar(heTodas);
+  const hayPrelim=heLiq.some(h=>heEsPreliminar(h));
+  const {diasMap,incapFechas}=construirDiasMap(hist,todoPersonal);
+  const heValor={};
+  heLiq.forEach(reg=>(reg.detalle||[]).forEach(d=>{ heValor[d.nombre]=(heValor[d.nombre]||0)+d.valor; }));
+
+  const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const serial=f=>Math.round((Date.UTC(f.getFullYear(),f.getMonth(),f.getDate())-Date.UTC(1899,11,30))/86400000);
+  const FMT_F="dd/mm/yyyy", FMT_M='"$" #,##0';
+  const wb=XLSX.utils.book_new();
+  const resumen=[["LIQUIDACIONES DE RETIRADOS — "+obtenerMesNombre().toUpperCase()+" "+ANIO_NUM+" · CONSTRUCTHOR S.A.S."],
+    ["TRABAJADOR","C.C.","RETIRO","DÍAS LIQ.","CESANTÍAS","INTERESES CES.","PRIMA","VACACIONES","TOTAL LIQUIDACIÓN","NÓMINA DEL MES","HORAS EXTRAS","TOTAL A PAGAR"]];
+  const hojas=[];
+
+  retirados.forEach((p,idx)=>{
+    const ret=parsearFechaFlexible(p.fechaRetiro);
+    const ing=parsearFechaFlexible(p.fechaIngreso)||ret;
+    const inicioAnio=new Date(ret.getFullYear(),0,1);
+    const desde=ing>inicioAnio?ing:inicioAnio;
+    const dias=days360US(ing,ret)+1;
+    const diasUA=days360US(desde,ret)+1;
+    const sal=p.salario, aux=sal<=2*SMMLV?AUX_T:0, base=sal+aux;
+    const ces=Math.round(base*diasUA/360);
+    const intc=Math.round(ces*0.12*diasUA/360);
+    const prima=Math.round(base*diasUA/360);
+    const vacDias=15*diasUA/360;
+    const vac=Math.round((sal/30)*vacDias);
+    const totLiq=ces+intc+prima+vac;
+    const d=diasAPagar(p,diasMap,incapFechas,ANIO_NUM,MES_NUM);
+    const salProp=Math.round(sal*d/30), auxProp=Math.round(aux*d/30);
+    const nomina=salProp+auxProp-Math.round(salProp*0.08);
+    const he=Math.round(heValor[p.nombre]||0);
+    const total=totLiq+nomina+he;
+    const ab=m=>MESES[m].slice(0,3).toUpperCase();
+    const cc=p.cedula||p.cc||"";
+    const ccTxt=String(cc).replace(/\B(?=(\d{3})+(?!\d))/g,",");
+
+    const ws={}, set=(ref,v,f,z)=>{ const c=(typeof v==="number")?{t:"n",v}:{t:"s",v:String(v)}; if(f) c.f=f; if(z) c.z=z; ws[ref]=c; };
+    set("A1","LIQUIDACION DEFINITIVA PRESTACIONES SOCIALES");
+    set("A3","EMPLEADOR :"); set("B3","CONSTRUCTHOR SAS - NIT 901,808,494");
+    set("A5","NOMBRE DEL EMPLEADO"); set("B5",p.nombre.toUpperCase());
+    set("H5",/^\d+$/.test(String(cc))?Number(cc):String(cc),null,"0"); set("H6","identificacion");
+    set("A8","CLASE DE CONTRATO:"); set("B8","OBRA O LABOR ");
+    set("A9","MOTIVO DEL RETIRO"); set("B9","Terminación de contrato ");
+    set("A12","Total del tiempo");
+    set("A13","FECHA DE LIQUIDACION"); set("B13",serial(ret),null,FMT_F);
+    set("A14","FECHA DE INGRESO"); set("B14",serial(ing),null,FMT_F);
+    set("A15","DIAS  TRABAJADOS"); set("B15",dias,"DAYS360(B14,B13)+1","#,##0");
+    set("A16","menos licencia no remunerada"); set("B16",0);
+    set("A17","dias de liquidacion"); set("B17",dias,"+B15-B16"); set("C17","días");
+    set("A19","CAUSAL DE RETIRO "); set("B19","Terminación de contrato por suspensión del proyecto");
+    set("A21","FECHA DE LIQUIDACION"); set("B21",serial(ret),"B13",FMT_F);
+    set("D21","SALARIO BASE DE LIQUIDACIÓN");
+    set("A22","FECHA inicio ultimo año"); set("B22",serial(desde),null,FMT_F);
+    set("D22","sueldo "); set("H22",sal,null,"#,##0");
+    set("A23","DIAS  TRABAJADOS"); set("B23",diasUA,"DAYS360(B22,B21)+1");
+    set("D23","promedio extras"); set("H23",0,null,"#,##0");
+    set("A24","menos licencia no remunerada"); set("B24",0);
+    set("D24","otros ( comisiones- etc)"); set("H24",0,null,"#,##0");
+    set("A25","dias de liquidacion"); set("B25",diasUA,"+B23-B24");
+    set("D25","Aux transp"); set("H25",aux,null,"#,##0"); set("I25",base,"SUM(H22:H25)",FMT_M);
+    set("A30","CESANTÍAS"); set("C30",base,"+H22+H25",FMT_M); set("D30","*"); set("E30",diasUA,"+B25"); set("H30",ces,"+ROUND(C30*E30/D31,0)",FMT_M); set("D31",360);
+    set("A33","INTERESES SOBRE CESANTÍAS"); set("C33",ces,"+H30",FMT_M); set("D33","*   12%   *"); set("E33",diasUA,"+E30"); set("H33",intc,"+ROUND(C33*12%*E33/C34,0)",FMT_M); set("C34",360);
+    set("A36","PRIMA DE SERVICIOS"); set("C36",base,"+I25",FMT_M); set("D36","*"); set("E36",diasUA,"+B25"); set("H36",prima,"+ROUND(C36*E36/D37,0)",FMT_M); set("D37",360);
+    set("A39","VACACIONES"); set("B39",vacDias,"15*B25/360","0.0000"); set("C39",sal/30,"+H22/30","#,##0"); set("H39",vac,"+ROUND(C39*B39,0)",FMT_M);
+    set("B41","TOTAL LIQUIDACION"); set("I41",totLiq,"SUM(H30:H39)",FMT_M);
+    set("A43","NOMINA (01 "+ab(MES_NUM-1)+" - "+String(ret.getDate()).padStart(2,"0")+" "+ab(ret.getMonth())+" )"); set("H43",nomina,null,FMT_M);
+    set("A44","HORAS EXTRAS (bonificación esporádica, no constituye salario)"); set("H44",he,null,FMT_M);
+    set("B45","TOTAL A PAGAR"); set("I45",total,"+I41+H43+H44",FMT_M);
+    set("A47","SON "); set("B47",numeroALetras(total)+" PESOS M/CTE");
+    set("A50","En la ciudad de Bogotá a los "+numeroALetras(ret.getDate()).toLowerCase()+" días del mes de "+MESES[ret.getMonth()]+" del año "+ret.getFullYear()+" se da por terminado el contrato de trabajo celebrado entre");
+    set("A51",p.nombre.toUpperCase()+" identificado con Cédula de Ciudadanía No. "+ccTxt+"  y CONSTRUCTHOR SAS ");
+    set("A52","identificada con NIT 901,808,494,-9 (Representante Legal ANYELA BIBIANA GOMEZ ORTIZ, identificado con Cédula de");
+    set("A53","Ciudadanía No. 52,528,437)");
+    set("A55","Con la firma del presente paz y salvo el trabajador afirma haber recibido a satisfacción los valores aquí liquidados, y declara que el empleador no ");
+    set("A56","le adeuda ningun otro concepto y valor relacionado con el contrato de trabajo  del cual se declara su terminación");
+    set("A60","Nombre del trabajador"); set("A61","Cédula"); set("A66","Empleador"); set("A67","Cédula");
+    ws["!ref"]="A1:L68";
+    ws["!cols"]=[{wch:32},{wch:16},{wch:12},{wch:10},{wch:12},{wch:3},{wch:4},{wch:13},{wch:23},{wch:14}];
+    ws["!merges"]=["A1:I1","B3:I3","B5:E5","H5:I5","H6:I6","B8:E8","B9:E10","A12:B12","C34:E34","B47:I48","A55:I55","A56:J56"].map(r=>XLSX.utils.decode_range(r));
+    let nombreHoja=(idx+1)+". "+p.nombre.replace(/[\[\]:*?\/\\]/g,"");
+    nombreHoja=nombreHoja.slice(0,31);
+    hojas.push({ws,nombreHoja});
+    resumen.push([p.nombre,cc,p.fechaRetiro,diasUA,ces,intc,prima,vac,totLiq,nomina,he,total]);
+  });
+
+  const tot=["TOTALES","","",""];
+  for(let c=4;c<=11;c++) tot.push(resumen.slice(2).reduce((a,r)=>a+(r[c]||0),0));
+  resumen.push(tot);
+  resumen.push([]);
+  resumen.push(["Nota: horas extras = bonificación esporádica (no entran en la base de prestaciones). Nómina del mes = salario y auxilio hasta la fecha de retiro menos salud y pensión del trabajador."+(hayPrelim?" ⚠️ Incluye horas extras con aprobación preliminar (solo un director)":"")]);
+  const wsR=XLSX.utils.aoa_to_sheet(resumen);
+  wsR["!cols"]=[{wch:34},{wch:13},{wch:12},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13},{wch:16},{wch:15},{wch:13},{wch:15}];
+  wsR["!merges"]=[XLSX.utils.decode_range("A1:L1")];
+  for(let r=2;r<resumen.length;r++) for(let c=4;c<=11;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(wsR[ref]&&typeof wsR[ref].v==="number") wsR[ref].z="#,##0"; }
+  XLSX.utils.book_append_sheet(wb,wsR,"Resumen");
+  hojas.forEach(h=>XLSX.utils.book_append_sheet(wb,h.ws,h.nombreHoja));
+  XLSX.writeFile(wb,"Liquidaciones_Retirados_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx");
+}
+
 function obtenerMesNombre(){
   const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  // Usa el mes que se está liquidando (no el mes actual) para que el encabezado sea correcto
+  if(typeof _nominaMesSel==="string" && /^\d{4}-\d{2}$/.test(_nominaMesSel)) return meses[parseInt(_nominaMesSel.split("-")[1])-1];
   return meses[new Date().getMonth()];
 }
 
