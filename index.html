@@ -331,7 +331,7 @@ const PERSONAL = [
   {id:5,  nombre:"Jesús David Rodríguez Vargas",     cedula:"1002331100", cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"22/06/2026", fechaRetiro:"19/11/2026", activo:false},
   {id:6,  nombre:"Fredy Alfonso Naranjo Corredor",   cedula:"74083294",   cargo:"Operador de Maquinaria", salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"30/06/2026", fechaRetiro:"18/07/2026", activo:false},
   {id:7,  nombre:"Jhon Alexander Gonzalez Rincon",   cedula:"1057979494", cargo:"Aux. Administrativo",    salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"19/11/2026", activo:false},
-  {id:8,  nombre:"Andres Felipe Bayona Tirano",      cedula:"1057602767", cargo:"Oficial",                salario:2400000, eps:"Coop Salud", pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"14/11/2026", activo:false},
+  {id:8,  nombre:"Andres Felipe Bayona Tirano",      cedula:"1057602767", cargo:"Oficial",                salario:2400000, eps:"Coop Salud", pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"13/11/2026", motivoRetiro:"Despido con justa causa", activo:false},
   {id:9,  nombre:"Jeisson Vladimir Pedraza Huerfano",cedula:"1057596177", cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Protección",  arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"28/08/2026", activo:false},
   {id:10, nombre:"Alvaro Saul Rodriguez Velasco",    cedula:"1016116576", cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", activo:true},
   {id:11, nombre:"Jose Luis Lozano",                 cedula:"1005854419", cargo:"Auxiliar Operativo",     salario:1750905, eps:"Nueva EPS",  pension:"Porvenir",    arl:"Positiva", ccf:"Comfaboy", fechaIngreso:"01/07/2026", fechaRetiro:"19/11/2026", activo:false},
@@ -367,6 +367,31 @@ const NOVEDADES_TIPOS = [
   {id:"despido",       icon:"📋", label:"Desvinculación (despido)",      retiro:true},
   {id:"fin_obra",      icon:"🏗️", label:"Fin de la obra / labor",        retiro:true},
 ];
+
+// Ajustes manuales de nómina por mes ("AAAA-MM") y trabajador.
+//  descuentoDias: días mínimos a descontar por ausencia sin justificación (no se suma a los ya registrados en Asistencia)
+//  bonificacion: pago no salarial (sin salud ni pensión, sin parafiscales)
+const AJUSTES_NOMINA = {
+  "2026-11": {
+    "Fabio Gomez Cardenas": {descuentoDias:2, motivo:"No se presentó 2 días sin causa justificada"},
+    "Cristian Fernando Mendivelso Gil": {bonificacion:500000, motivo:"Bonificación no salarial"}
+  }
+};
+function ajusteNomina(nombre, anio, mes){
+  return (AJUSTES_NOMINA[anio+"-"+String(mes).padStart(2,"0")]||{})[nombre]||{};
+}
+// Personas que cuentan en la nómina de un mes: activos y quienes se retiraron dentro o después de ese mes
+function personalDelMes(anio, mes){
+  const ini=new Date(anio,mes-1,1), fin=new Date(anio,mes,0);
+  return getPersonal().filter(p=>{
+    if(!p.nombre) return false;
+    const ing=parsearFechaFlexible(p.fechaIngreso);
+    if(ing && ing>fin) return false;
+    if(p.activo) return true;
+    const ret=parsearFechaFlexible(p.fechaRetiro);
+    return !!(ret && ret>=ini);
+  });
+}
 
 const ID_MAX_BASE   = Math.max(...PERSONAL.map(p=>p.id)); // último id del personal "de código" — los nuevos vinculados siempre tendrán id mayor a este
 const LS_RETIROS    = "nom_retiros";
@@ -2772,33 +2797,25 @@ function parsearFechaFlexible(str){
 }
 function diasAPagar(p, diasMap, incapFechas, anioM, mesM){
   const nov=diasMap[p.nombre]?.novedades||[];
-  const diasInjust=nov.filter(n=>n==="Ausencia sin justificación").length;
+  const aj=ajusteNomina(p.nombre, anioM, mesM);
+  const diasInjust=Math.max(nov.filter(n=>n==="Ausencia sin justificación").length, aj.descuentoDias||0);
   const diasIncap=diasIncapacidadADescontar(incapFechas[p.nombre]||[]);
-  let dias=30-diasInjust-diasIncap;
   const inicioMes=new Date(anioM,mesM-1,1), finMes=new Date(anioM,mesM,0);
   const diasCorridosMes=finMes.getDate();
+  // Días base del mes: 30, o proporcionales si ingresó o se retiró dentro del mes
+  let dias=30;
   const ing=parsearFechaFlexible(p.fechaIngreso);
-  if(ing){
-    if(ing>=inicioMes && ing<=finMes){
-      const diasDesdeIngreso=diasCorridosMes-ing.getDate()+1;
-      const proporcional=Math.round(30*diasDesdeIngreso/diasCorridosMes);
-      dias=Math.min(dias,proporcional);
-    }
+  if(ing && ing>=inicioMes && ing<=finMes){
+    const diasDesdeIngreso=diasCorridosMes-ing.getDate()+1;
+    dias=Math.min(dias,Math.round(30*diasDesdeIngreso/diasCorridosMes));
   }
-  // Si el trabajador ya se retiró, no se le puede pagar más allá de su fecha de retiro
   const ret=parsearFechaFlexible(p.fechaRetiro);
   if(ret){
-    if(ret<inicioMes){
-      // Se retiró antes de que empezara este mes: no hay nada que liquidar
-      dias=0;
-    } else if(ret<=finMes){
-      // Se retiró durante este mes: se le paga proporcional hasta su último día
-      const proporcionalRetiro=Math.round(30*ret.getDate()/diasCorridosMes);
-      dias=Math.min(dias,proporcionalRetiro);
-    }
-    // Si la fecha de retiro es después de este mes, no afecta el cálculo
+    if(ret<inicioMes) return 0; // se retiró antes de este mes: nada que liquidar
+    if(ret<=finMes) dias=Math.min(dias,Math.round(30*ret.getDate()/diasCorridosMes));
   }
-  return Math.max(0,dias);
+  // Los descuentos se restan de los días realmente pagables (también con proporcional)
+  return Math.max(0,dias-diasInjust-diasIncap);
 }
 
 function heEsPreliminar(h){ return h.estado!=="aprobado"; }
@@ -2824,7 +2841,7 @@ async function nominaSincronizarDesdeAirtable(){
 function renderNomina(){
   const hoy=new Date();
   if(!_nominaMesSel) _nominaMesSel = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0");
-  const personal=getPersonal().filter(p=>p.activo);
+  const personal=personalDelMes(parseInt(_nominaMesSel.split("-")[0]), parseInt(_nominaMesSel.split("-")[1]));
   const histTodo=getAsistenciaHist();
   const heTodasSinFiltrar=getHorasExtras();
   // Filtrar SOLO los registros del mes seleccionado
@@ -2865,12 +2882,14 @@ function renderNomina(){
     const salProp=Math.round(p.salario*d/30);
     const auxProp=Math.round(aux*d/30);
     const he=heMap[p.nombre]||{horas:0,valor:0,tienePrelim:false};
-    const totalDev=salProp+auxProp+he.valor;
+    const bonif=ajusteNomina(p.nombre, ANIO_M, MES_M).bonificacion||0;
+    const totalDev=salProp+auxProp+he.valor+bonif;
     const dedSalud=Math.round(salProp*0.04);
     const dedPens=Math.round(salProp*0.04);
     const neto=totalDev-dedSalud-dedPens;
     const bg=i%2===0?"#f8fafc":"#fff";
-    const heTxt = he.horas>0 ? he.horas.toFixed(1)+"h · $"+he.valor.toLocaleString("es-CO")+(he.tienePrelim?" ⚠️":"") : "—";
+    const heTxt = (he.horas>0 ? he.horas.toFixed(1)+"h · $"+he.valor.toLocaleString("es-CO")+(he.tienePrelim?" ⚠️":"") : "—")
+      +(bonif>0?"<br><span title='Bonificación no salarial'>+ Bonif. $"+bonif.toLocaleString("es-CO")+"</span>":"");
     return `<tr style="background:${bg}">
       <td style="font-size:11px;color:var(--text3)">${p.cedula||"—"}</td>
       <td style="font-size:12px"><strong>${p.nombre}</strong><br><span class="muted">${p.cargo}</span></td>
@@ -2892,7 +2911,7 @@ function renderNomina(){
     const salProp=Math.round(p.salario*d/30);
     const auxProp=Math.round(aux*d/30);
     const he=heMap[p.nombre]||{valor:0};
-    const totalDev=salProp+auxProp+he.valor;
+    const totalDev=salProp+auxProp+he.valor+(ajusteNomina(p.nombre, ANIO_M, MES_M).bonificacion||0);
     const ded=Math.round(salProp*0.08);
     return p2+(totalDev-ded);
   },0);
@@ -3028,7 +3047,7 @@ async function exportarNominaExcel(modoProyeccion){
     const aux    = sal <= 2*SMMLV ? AUX_T : 0;
     const salProp = Math.round(sal*d/30);
     const auxProp = Math.round(aux*d/30);
-    const bonif   = 0; // celda manual
+    const bonif   = ajusteNomina(p.nombre, ANIO_NUM, MES_NUM).bonificacion||0; // pago no salarial (ver AJUSTES_NOMINA)
     const totDev  = salProp + auxProp + bonif;
     const salud   = Math.round(salProp*0.04);
     const pension = Math.round(salProp*0.04);
@@ -3179,7 +3198,7 @@ async function exportarNominaExcel(modoProyeccion){
     const aux    = sal<=2*SMMLV?AUX_T:0;
     const salProp = Math.round(sal*d/30);
     const auxProp = Math.round(aux*d/30);
-    const totDev  = salProp+auxProp;
+    const totDev  = salProp+auxProp+(ajusteNomina(p.nombre, ANIO_NUM, MES_NUM).bonificacion||0);
     const deduc   = Math.round(salProp*0.08);
     const neto    = totDev-deduc;
     const he      = heMap[p.nombre]||{horas:0,valor:0};
@@ -3199,11 +3218,11 @@ async function exportarNominaExcel(modoProyeccion){
   const rsTotRow = ["TOTALES","",
     todoPersonal.reduce((s,p)=>s+(diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM)),0),
     todoPersonal.reduce((s,p)=>s+(diasMap[p.nombre]?.ausentes||0),0),
-    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0;const sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08);return s+(td-ded);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0;const sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap+(ajusteNomina(p.nombre,ANIO_NUM,MES_NUM).bonificacion||0),ded=Math.round(sp*0.08);return s+(td-ded);},0),
     Math.round(todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.horas||0),0)*10)/10,
     todoPersonal.reduce((s,p)=>s+(heMap[p.nombre]?.valor||0),0),
     todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,sp=Math.round(sal*d/30);return s+Math.round(sp*0.2466);},0),
-    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0,sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap,ded=Math.round(sp*0.08),neto=td-ded,he=heMap[p.nombre]||{valor:0},base=sp,paraf=Math.round(base*0.2466);return s+(neto+he.valor+paraf);},0),
+    todoPersonal.reduce((s,p)=>{const d=diasAPagar(p, diasMap, incapFechas, ANIO_NUM, MES_NUM),sal=p.salario,aux=sal<=2*SMMLV?AUX_T:0,sp=Math.round(sal*d/30),ap=Math.round(aux*d/30),td=sp+ap+(ajusteNomina(p.nombre,ANIO_NUM,MES_NUM).bonificacion||0),ded=Math.round(sp*0.08),neto=td-ded,he=heMap[p.nombre]||{valor:0},base=sp,paraf=Math.round(base*0.2466);return s+(neto+he.valor+paraf);},0),
     "Total: "+todoPersonal.length
   ];
   rsData.push(rsTotRow);
@@ -3293,7 +3312,7 @@ async function exportarLiquidaciones(){
   const FMT_F="dd/mm/yyyy", FMT_M='"$" #,##0';
   const wb=XLSX.utils.book_new();
   const resumen=[["LIQUIDACIONES DE RETIRADOS — "+obtenerMesNombre().toUpperCase()+" "+ANIO_NUM+" · CONSTRUCTHOR S.A.S."],
-    ["TRABAJADOR","C.C.","INGRESO","RETIRO","DÍAS LIQ.","CESANTÍAS","INTERESES CES.","PRIMA","VACACIONES","TOTAL LIQUIDACIÓN","NÓMINA DEL MES","HORAS EXTRAS","TOTAL A PAGAR"]];
+    ["TRABAJADOR","C.C.","INGRESO","RETIRO","DÍAS LIQ.","CESANTÍAS","INTERESES CES.","PRIMA","VACACIONES","TOTAL LIQUIDACIÓN","NÓMINA DEL MES","HORAS EXTRAS","BONIF. NO SALARIAL","TOTAL A PAGAR"]];
   const hojas=[];
 
   retirados.forEach((p,idx)=>{
@@ -3314,7 +3333,9 @@ async function exportarLiquidaciones(){
     const salProp=Math.round(sal*d/30), auxProp=Math.round(aux*d/30);
     const nomina=salProp+auxProp-Math.round(salProp*0.08);
     const he=Math.round(heValor[p.nombre]||0);
-    const total=totLiq+nomina+he;
+    const bonif=ajusteNomina(p.nombre,ANIO_NUM,MES_NUM).bonificacion||0;
+    const nominaTotal=nomina+he+bonif;
+    const total=totLiq+nominaTotal;
     const ab=m=>MESES[m].slice(0,3).toUpperCase();
     const cc=p.cedula||p.cc||"";
     const ccTxt=String(cc).replace(/\B(?=(\d{3})+(?!\d))/g,",");
@@ -3325,14 +3346,14 @@ async function exportarLiquidaciones(){
     set("A5","NOMBRE DEL EMPLEADO"); set("B5",p.nombre.toUpperCase());
     set("H5",/^\d+$/.test(String(cc))?Number(cc):String(cc),null,"0"); set("H6","identificacion");
     set("A8","CLASE DE CONTRATO:"); set("B8","OBRA O LABOR ");
-    set("A9","MOTIVO DEL RETIRO"); set("B9","Terminación de contrato ");
+    set("A9","MOTIVO DEL RETIRO"); set("B9",(p.motivoRetiro||"Terminación de contrato")+" ");
     set("A12","Total del tiempo");
     set("A13","FECHA DE LIQUIDACION"); set("B13",serial(ret),null,FMT_F);
     set("A14","FECHA DE INGRESO"); set("B14",serial(ing),null,FMT_F);
     set("A15","DIAS  TRABAJADOS"); set("B15",dias,"DAYS360(B14,B13)+1","#,##0");
     set("A16","menos licencia no remunerada"); set("B16",0);
     set("A17","dias de liquidacion"); set("B17",dias,"+B15-B16"); set("C17","días");
-    set("A19","CAUSAL DE RETIRO "); set("B19","Terminación de contrato por suspensión del proyecto");
+    set("A19","CAUSAL DE RETIRO "); set("B19"," ");
     set("A21","FECHA DE LIQUIDACION"); set("B21",serial(ret),"B13",FMT_F);
     set("D21","SALARIO BASE DE LIQUIDACIÓN");
     set("A22","FECHA inicio ultimo año"); set("B22",serial(desde),null,FMT_F);
@@ -3348,10 +3369,10 @@ async function exportarLiquidaciones(){
     set("A36","PRIMA DE SERVICIOS"); set("C36",base,"+I25",FMT_M); set("D36","*"); set("E36",diasUA,"+B25"); set("H36",prima,"+ROUND(C36*E36/D37,0)",FMT_M); set("D37",360);
     set("A39","VACACIONES"); set("B39",vacDias,"15*B25/360","0.0000"); set("C39",sal/30,"+H22/30","#,##0"); set("H39",vac,"+ROUND(C39*B39,0)",FMT_M);
     set("B41","TOTAL LIQUIDACION"); set("I41",totLiq,"SUM(H30:H39)",FMT_M);
-    set("A43","NOMINA (01 "+ab(MES_NUM-1)+" - "+String(ret.getDate()).padStart(2,"0")+" "+ab(ret.getMonth())+" )"); set("H43",nomina,null,FMT_M);
-    set("A44","HORAS EXTRAS (bonificación esporádica, no constituye salario)"); set("H44",he,null,FMT_M);
-    set("B45","TOTAL A PAGAR"); set("I45",total,"+I41+H43+H44",FMT_M);
-    set("A47","SON "); set("B47",numeroALetras(total)+" PESOS M/CTE");
+    set("B43","NOMINA (01-"+String(ret.getDate()).padStart(2,"0")+" "+ab(ret.getMonth())+")"); set("I43",nominaTotal,null,FMT_M);
+    set("B44","Incluye: salario y auxilio netos $"+nomina.toLocaleString("es-CO")+(he?" · horas extras $"+he.toLocaleString("es-CO"):"")+(bonif?" · bonificación no salarial $"+bonif.toLocaleString("es-CO"):""));
+    set("B45","TOTAL NOMINA + LIQUIDACIÓN "); set("I45",total,"+I41+I43",FMT_M);
+    set("A47","SON:"); set("B47",numeroALetras(total)+" PESOS M/CTE");
     set("A50","En la ciudad de Bogotá a los "+numeroALetras(ret.getDate()).toLowerCase()+" días del mes de "+MESES[ret.getMonth()]+" del año "+ret.getFullYear()+" se da por terminado el contrato de trabajo celebrado entre");
     set("A51",p.nombre.toUpperCase()+" identificado con Cédula de Ciudadanía No. "+ccTxt+"  y CONSTRUCTHOR SAS ");
     set("A52","identificada con NIT 901,808,494,-9 (Representante Legal ANYELA BIBIANA GOMEZ ORTIZ, identificado con Cédula de");
@@ -3362,27 +3383,27 @@ async function exportarLiquidaciones(){
     ws["!ref"]="A1:L68";
     ws["!cols"]=[{wch:32},{wch:16},{wch:12},{wch:10},{wch:12},{wch:3},{wch:4},{wch:13},{wch:23},{wch:14}];
     ws["!merges"]=["A1:I1","B3:I3","B5:E5","H5:I5","H6:I6","B8:E8","B9:E10","A12:B12","C34:E34","B47:I48","A55:I55","A56:J56"].map(r=>XLSX.utils.decode_range(r));
-    let nombreHoja=(idx+1)+". "+p.nombre.replace(/[\[\]:*?\/\\]/g,"");
+    let nombreHoja=(idx+1)+". "+p.nombre.toUpperCase().replace(/[\[\]:*?\/\\]/g,"");
     nombreHoja=nombreHoja.slice(0,31);
     ws["!margins"]={left:0.5,right:0.5,top:0.6,bottom:0.6,header:0.3,footer:0.3};
     hojas.push({ws,nombreHoja});
-    resumen.push([p.nombre,cc,p.fechaIngreso||"",p.fechaRetiro,diasUA,ces,intc,prima,vac,totLiq,nomina,he,total]);
+    resumen.push([p.nombre,cc,p.fechaIngreso||"",p.fechaRetiro,diasUA,ces,intc,prima,vac,totLiq,nomina,he,bonif,total]);
   });
 
   const tot=["TOTALES","","","",""];
-  for(let c=5;c<=12;c++) tot.push(resumen.slice(2).reduce((a,r)=>a+(r[c]||0),0));
+  for(let c=5;c<=13;c++) tot.push(resumen.slice(2).reduce((a,r)=>a+(r[c]||0),0));
   resumen.push(tot);
   resumen.push([]);
-  resumen.push(["Nota: horas extras = bonificación esporádica (no entran en la base de prestaciones). Nómina del mes = salario y auxilio hasta la fecha de retiro menos salud y pensión del trabajador."+(hayPrelim?" ⚠️ Incluye horas extras con aprobación preliminar (solo un director)":"")]);
+  resumen.push(["Nota: las horas extras y la bonificación no salarial no entran en la base de prestaciones. Nómina del mes = salario y auxilio hasta la fecha de retiro menos salud y pensión del trabajador."+(hayPrelim?" ⚠️ Incluye horas extras con aprobación preliminar (solo un director)":"")]);
   const wsR=XLSX.utils.aoa_to_sheet(resumen);
-  wsR["!cols"]=[{wch:34},{wch:13},{wch:12},{wch:12},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13},{wch:16},{wch:15},{wch:13},{wch:15}];
-  wsR["!merges"]=[XLSX.utils.decode_range("A1:M1")];
-  for(let r=2;r<resumen.length;r++) for(let c=5;c<=12;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(wsR[ref]&&typeof wsR[ref].v==="number") wsR[ref].z="#,##0"; }
+  wsR["!cols"]=[{wch:34},{wch:13},{wch:12},{wch:12},{wch:9},{wch:13},{wch:13},{wch:13},{wch:13},{wch:16},{wch:15},{wch:13},{wch:15},{wch:15}];
+  wsR["!merges"]=[XLSX.utils.decode_range("A1:N1")];
+  for(let r=2;r<resumen.length;r++) for(let c=5;c<=13;c++){ const ref=XLSX.utils.encode_cell({r,c}); if(wsR[ref]&&typeof wsR[ref].v==="number") wsR[ref].z="#,##0"; }
   wsR["!margins"]={left:0.4,right:0.4,top:0.6,bottom:0.6,header:0.3,footer:0.3};
   XLSX.utils.book_append_sheet(wb,wsR,"Resumen");
   hojas.forEach(h=>XLSX.utils.book_append_sheet(wb,h.ws,h.nombreHoja));
   // Área de impresión: cada liquidación completa (hasta las firmas); el resumen entero
-  const nombresImp=[{Name:"_xlnm.Print_Area",Sheet:0,Ref:"Resumen!$A$1:$M$"+resumen.length}];
+  const nombresImp=[{Name:"_xlnm.Print_Area",Sheet:0,Ref:"Resumen!$A$1:$N$"+resumen.length}];
   hojas.forEach((h,i)=>nombresImp.push({Name:"_xlnm.Print_Area",Sheet:i+1,Ref:"'"+h.nombreHoja.replace(/'/g,"''")+"'!$A$1:$J$68"}));
   wb.Workbook={Names:nombresImp};
   const nombreArchivo="Liquidaciones_Retirados_"+obtenerMesNombre()+"_"+ANIO_NUM+".xlsx";
@@ -3414,54 +3435,4 @@ async function exportarLiquidaciones(){
 }
 
 function obtenerMesNombre(){
-  const meses=["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  // Usa el mes que se está liquidando (no el mes actual) para que el encabezado sea correcto
-  if(typeof _nominaMesSel==="string" && /^\d{4}-\d{2}$/.test(_nominaMesSel)) return meses[parseInt(_nominaMesSel.split("-")[1])-1];
-  return meses[new Date().getMonth()];
-}
-
-function aplicarFormatoNomina(ws, nPersonal){
-  // Formatos numéricos para columnas de valores
-  const rango = nPersonal + 6;
-  for(let r=6; r<=rango; r++){
-    ["F","G","H","I","J","K","L","M","N"].forEach(col=>{
-      const ref = col+r;
-      if(ws[ref]) ws[ref].z = col==="G"?"0":'#,##0';
-    });
-  }
-}
-
-function aplicarFormatoHE(ws, nPersonal, diasMes){
-  const rango = nPersonal + 3;
-  for(let r=3; r<=rango; r++){
-    for(let c=3; c<=2+diasMes; c++){
-      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
-      if(ws[ref] && typeof ws[ref].v === "number") ws[ref].z = "0.#";
-    }
-    // Columnas de valor
-    [2+diasMes+4, 2+diasMes+5, 2+diasMes+6].forEach(c=>{
-      const ref = XLSX.utils.encode_cell({r:r-1,c:c-1});
-      if(ws[ref]) ws[ref].z = '#,##0';
-    });
-  }
-}
-
-function iniciales(n){ return n.split(" ").slice(0,2).map(x=>x[0]).join("").toUpperCase(); }
-function getFechaISO(){
-  const h=new Date();
-  return `${h.getDate().toString().padStart(2,"0")}/${(h.getMonth()+1).toString().padStart(2,"0")}/${h.getFullYear()}`;
-}
-function mostrarOk(titulo,sub,detalle){
-  document.getElementById("okTitle").textContent=titulo;
-  document.getElementById("okSub").textContent=sub;
-  document.getElementById("okDetail").innerHTML=detalle;
-  document.getElementById("overlayOk").classList.add("vis");
-}
-function cerrarOverlayOk(){
-  document.getElementById("overlayOk").classList.remove("vis");
-  irTab(tabActual);
-}
-</script>
-</body>
-</html>
+  const meses=["Enero","Febrero","Marzo","Abril","Mayo
